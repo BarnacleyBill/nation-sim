@@ -57,9 +57,15 @@ def write_stats(w, log, out_dir, stats):
     row("Households", f"{stats['households']} ({stats['homeless_households']} without a house)")
     row("Average satisfaction", f"{stats['satisfaction']:.0%}")
     row("Going hungry", stats["hungry"])
-    regions = "".join(f"<tr><td>{esc(w.regions[k].name)}</td><td>{n}</td></tr>" for k, n in stats["by_region"].items())
+    row("Households close to hunger", stats.get("near_hunger_households", 0))
+    row("Coins held by the richest tenth of households", f"{stats.get('richest_tenth_share', 0):.0%}")
+    mood = stats.get("region_mood", {})
+    regions = "".join(f"<tr><td>{esc(w.regions[k].name)}</td><td>{n}</td>"
+                      f"<td>{mood.get(k, {}).get('satisfaction', 0):.0%}</td>"
+                      f"<td>{mood.get(k, {}).get('approval', 0):.0%}</td></tr>" for k, n in stats["by_region"].items())
     h.append("<div class='section'><h4>People</h4><table>" + "".join(rows) + "</table>"
-             f"<h3 style='margin-top:10px'>By region</h3><table>{regions}</table></div>")
+             "<h3 style='margin-top:10px'>By region</h3><table><tr><th>Region</th><th>People</th>"
+             f"<th>Satisfaction</th><th>Approval</th></tr>{regions}</table></div>")
 
     # government
     rows = []
@@ -113,6 +119,27 @@ def write_stats(w, log, out_dir, stats):
         inv_rows += "<p>New this week: " + "; ".join(esc(e["summary"]) for e in new_inv) + "</p>"
     h.append("<div class='section'><h4>Language</h4>" + lang_rows + "</div>")
     h.append("<div class='section'><h4>Inventions</h4>" + inv_rows + "</div>")
+
+    # games and arts
+    from . import leisure, arts
+    champs = leisure.champions(w)
+    crow = "".join(f"<tr><td>{esc(s)}</td><td>{esc(c['national'] or '-')}</td><td>"
+                   + esc(", ".join(f"{r}: {n}" for r, n in c["regional"].items() if n) or "-") + "</td></tr>"
+                   for s, c in champs.items())
+    h.append("<div class='section'><h4>Champions</h4><table><tr><th>Contest</th><th>National</th><th>Regional</th></tr>"
+             f"{crow}</table></div>")
+    works = arts.ensure(w)["works"]
+    famous = [x for x in works.values() if x["famous"]]
+    pops = arts.popular_by_region(w)
+    art_html = f"<p>{len(works)} works remembered; {len(famous)} famous.</p>"
+    if pops:
+        art_html += "<p>Most popular now: " + "; ".join(
+            f"{esc(w.regions[r].name)}: '{esc(x['title'])}' ({esc(x['title_en'])}), a {esc(x['kind'])} by "
+            f"{esc(x['artist_name'])}" for r, x in pops.items()) + "</p>"
+    if famous:
+        art_html += "<p>Famous works: " + "; ".join(
+            f"'{esc(x['title'])}' ({esc(x['title_en'])}) by {esc(x['artist_name'])}" for x in famous[-8:]) + "</p>"
+    h.append("<div class='section'><h4>Arts</h4>" + art_html + "</div>")
 
     # charts
     if len(history) >= 2:

@@ -105,6 +105,8 @@ def ensure(w, log):
             new = _choose_staff(w, rng, beat, taken)
             if new:
                 taken.add(new["id"])
+                from .model import note
+                note(w.people[new["id"]], w.day, f"became the paper's {BEAT_TITLES[beat].lower()}")
                 if cur:
                     changes.append((cur, reason, new))
                 st["staff"][beat] = new
@@ -293,7 +295,7 @@ def articles(w, st, events, wr):
     # --- government actions (grouped into one round-up)
     gov_lines = []
     for e in _group(events, "works_begun", "works_done", "relief", "subsidy", "subsidy_ended", "price_cap",
-                    "price_cap_ended", "mint", "tax_up", "tax_down", "promise_kept", "works_stalled",
+                    "price_cap_ended", "mint", "tax_up", "tax_down", "promise_kept", "promise_broken", "works_stalled",
                     "invention_reward_offered", "subsidy_lapsed"):
         text = esc(e["summary"])
         if e["type"] == "works_begun":
@@ -352,6 +354,11 @@ def articles(w, st, events, wr):
         q = quote(w, wr, region=worst, about="life")
         if q:
             paras.append(q)
+        from .paper_extra import hunger_weeks
+        wk = hunger_weeks(st, worst)
+        if wk > 1:
+            paras.append(f"It is the {wk}{'th' if 10 <= wk % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(wk % 10, 'th')} "
+                         f"week running that {esc(rname(w, worst))} has gone short.")
         big = by_region[worst] >= 20
         out.append({"section": "front" if big else "land", "score": 85 if big else 45,
                     "headline": (f"Famine in {rname(w, worst)}" if big
@@ -586,11 +593,22 @@ def render(w, st, issue, data):
             for s in front[1:]:
                 h.append(_story(s))
             h.append("</div>")
-    for sec, title_ in (("government", "Government"), ("land", "The Land"), ("people", "People")):
+    for sec, title_ in (("government", "Government"), ("land", "The Land"), ("sports", "Festivals and Games"),
+                        ("people", "People")):
         group = [s for s in rest if s["section"] == sec]
         if group:
             h.append(f"<div class='section'><h4>{title_}</h4><div class='cols'>"
                      + "".join(_story(s) for s in group) + "</div></div>")
+    if data.get("arts"):
+        a = data["arts"]
+        h.append(f"<div class='section'><h4>Arts and Songs</h4><div class='by'>{data['people_by']}</div><ul>"
+                 + "".join(f"<li>{x}</li>" for x in a["paras"]) + "</ul></div>")
+    for key, sec_title in (("region", "Around the Nation"), ("profile", "A Life")):
+        s_ = data.get(key)
+        if s_:
+            h.append(f"<div class='section'><h4>{sec_title}</h4><h3>{esc(s_['headline'])}</h3>"
+                     f"<div class='by'>{data['people_by']}</div>" + "".join(f"<p>{x}</p>" for x in s_["paras"])
+                     + "</div>")
     # markets and weather
     h.append("<div class='section'><h4>Markets and Weather</h4><div class='cols'><div class='story'>"
              f"<h3>Prices at Market</h3><div class='by'>{data['land_by']}</div><table><tr><th>Good</th><th>Coins</th>"
@@ -608,6 +626,9 @@ def render(w, st, issue, data):
     if data["letters"]:
         h.append("<div class='section'><h4>Letters</h4>" + "".join(
             f"<div class='letter'>{t}<div class='sig'>{s}</div></div>" for t, s in data["letters"]) + "</div>")
+    if data.get("obituaries"):
+        h.append("<div class='section'><h4>Obituaries</h4>" + "".join(f"<p>{x}</p>" for x in data["obituaries"])
+                 + "</div>")
     b, m, d = data["births"], data["marriages"], data["deaths"]
     if b or m or d:
         h.append("<div class='section'><h4>Births, Marriages and Deaths</h4><div class='cols'>")
@@ -616,9 +637,15 @@ def render(w, st, issue, data):
                 h.append(f"<div class='story'><h3>{title_}</h3><ul>" + "".join(f"<li>{x}</li>" for x in items)
                          + "</ul></div>")
         h.append("</div></div>")
+    if data.get("taverns"):
+        h.append("<div class='section'><h4>From the Taverns</h4><ul>"
+                 + "".join(f"<li>{x}</li>" for x in data["taverns"]) + "</ul></div>")
     if data["comings"]:
         h.append("<div class='section'><h4>Comings and Goings</h4><ul>"
                  + "".join(f"<li>{x}</li>" for x in data["comings"]) + "</ul></div>")
+    if data.get("year_ago"):
+        h.append("<div class='section'><h4>One Year Ago</h4><ul>"
+                 + "".join(f"<li>{x}</li>" for x in data["year_ago"]) + "</ul></div>")
     h.append("<div class='section staff'>" + esc(data["staff_line"]) + "</div>")
     prev_link = f"<a href='issue-{issue - 1:04d}.html'>Previous issue</a> | " if issue > 1 else ""
     h.append(f"<div class='nav'>{prev_link}<a href='archive.html'>All issues</a></div>")
@@ -643,7 +670,12 @@ def publish(w, log, out_dir, stats, stats_prev=None):
         events = log.between(0, end, 1)   # the first issue covers everything since the founding
     rng = random.Random(w.seed * 7919 + issue)
     wr = Writer(w, rng)
-    stories = articles(w, st, events, wr)
+    from . import paper_extra as X
+    follow = X.threads(w, st, events, wr)
+    stories = articles(w, st, events, wr) + follow + X.sports(w, events, wr)
+    recap = X.term_recap(w, st, log, wr)
+    if recap:
+        stories.append(recap)
     for cur, reason, new in changes:
         stories.append({"section": "people", "score": 20, "headline": "Changes at This Paper",
                         "paras": [f"Our {BEAT_TITLES[new['beat']].lower()}, {esc(cur['name'])}, has {reason}. "
@@ -656,8 +688,10 @@ def publish(w, log, out_dir, stats, stats_prev=None):
         if s["section"] == "front":
             front_seen += 1
             if front_seen > 4:
-                s["section"] = "government" if s["beat"] == "politics" else "land" if s["beat"] == "land" else "people"
+                s["section"] = {"politics": "government", "land": "land"}.get(s["beat"], "people")
         s["by"] = byline(w, st, s["beat"])
+    if not any(s["section"] == "front" for s in stories) and stories and stories[0]["score"] >= 30:
+        stories[0]["section"] = "front"
     if not any(s["section"] == "front" for s in stories):
         # a quiet week: lead with how people are faring
         q = quote(w, wr, about="life")
@@ -674,6 +708,9 @@ def publish(w, log, out_dir, stats, stats_prev=None):
         "words": words_corner(w, events, wr), "editorial": editorial(w, st, stats, wr),
         "letters": letters(w, st, wr), "births": b, "marriages": m, "deaths": d,
         "comings": comings_goings(events)[:12], "staff_line": staff_line, "land_by": byline(w, st, "land"),
+        "arts": X.arts_section(w, st, events, wr), "region": X.region_report(w, st, stats, wr),
+        "profile": X.profile(w, st, wr), "obituaries": X.obituaries(w, events), "year_ago": X.year_ago(w, st, log),
+        "taverns": X.taverns(events), "people_by": byline(w, st, "people"),
     }
     pdir = os.path.join(out_dir, "paper")
     os.makedirs(pdir, exist_ok=True)

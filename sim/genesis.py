@@ -26,7 +26,7 @@ def _pick_job(rng, region_res):
     for job, spec in C.JOBS.items():
         res = spec["resource"]
         if res is None:
-            weights[job] = {"smith": 0.03, "weaver": 0.05, "builder": 0.04}[job]
+            weights[job] = {"smith": 0.03, "weaver": 0.05, "builder": 0.04, "brewer": 0.02}[job]
         else:
             weights[job] = region_res.get(res, 0) * {"farmer": 0.45, "fisher": 0.25, "herder": 0.18,
                                                       "woodcutter": 0.08, "quarrier": 0.05,
@@ -89,6 +89,8 @@ def _person(w, rng, sex, age_years, region, household, family=None):
                traits=_traits(rng), job_pref=_job_prefs(rng),
                clothing=rng.randint(20, C.CLOTHING_LIFE))
     p.needs = {n: 0.6 for n in C.NEEDS}
+    from .model import note
+    note(p, birth, f"born in {w.regions[region].town}")
     w.people[pid] = p
     return p
 

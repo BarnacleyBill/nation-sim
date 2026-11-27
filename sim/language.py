@@ -37,6 +37,7 @@ CORE = {
     "quarrier": "quarrier", "miner": "miner", "smith": "smith", "weaver": "weaver",
     "builder": "builder", "market": "market", "home": "home", "death": "death",
     "birth": "birth", "marriage": "marriage", "harvest": "harvest",
+    "ale": "ale", "song": "song", "game": "game",
 }
 
 # New concepts and how people might build a word for them from old ones.
@@ -66,6 +67,11 @@ NEW_CONCEPTS = {
     "famine": ("famine", ("great", "hunger")),
     "orphan": ("orphan taken in by others", ("child", "keep")),
     "newspaper": ("the weekly paper", ("people", "call")),
+    "statue": ("statue", ("stone", "chief")),
+    "festival": ("festival", ("great", "day")),
+    "champion": ("champion", ("game", "chief")),
+    "tavern": ("tavern", ("ale", "house")),
+    "brewer": ("brewer", ("ale", "make")),
 }
 
 # Which event types first call for which concept.
@@ -75,9 +81,10 @@ EVENT_CONCEPTS = {
     "subsidy": "subsidy", "relief": "relief", "price_cap": "price_cap",
     "drought": "drought", "harvest_blight": "blight", "flood": "flood", "blizzard": "blizzard",
     "fish_run": "fish_run", "orphans_taken_in": "orphan",
+    "festival": "festival", "contest": "champion", "tavern_quarrel": "tavern",
 }
 WORKS_CONCEPTS = {"well": "well", "granary": "granary", "mill": "mill", "road": "road",
-                  "house": "public_house"}
+                  "house": "public_house", "statue": "statue"}
 
 # Ways pronunciation can shift: (plain description, pattern, replacement)
 SOUND_CHANGES = [
@@ -99,6 +106,16 @@ SOUND_CHANGES = [
 def ensure(w):
     lang = getattr(w, "language", None)
     if lang:
+        # newer versions added everyday words; give older nations those too
+        missing = [c for c in CORE if c not in lang["words"]]
+        if missing:
+            used = _all_forms(w)
+            for concept in missing:
+                form = _fresh(w, used, syllables=w.rng.choice([1, 2]))
+                lang["words"][concept] = {
+                    "meaning": CORE[concept], "origin": None, "coined": None, "how": "old",
+                    "forms": {r: form for r in w.regions}, "adoption": {r: 1.0 for r in w.regions},
+                    "established": True}
         return lang
     lang = {"words": {}, "changes": [], "next_change_day": w.day + 400}
     w.language = lang
@@ -210,6 +227,8 @@ def weekly(w, log, last_week_events):
             concept = WORKS_CONCEPTS.get(ev["data"].get("kind"))
         if ev["type"] == "hunger" and ev["data"].get("count", 0) >= 20:
             concept = "famine"
+        if ev["type"] in ("job_change", "first_job") and "brewer" in (ev["data"].get("new"), ev["data"].get("job")):
+            concept = "brewer"
         if not concept or concept in lang["words"]:
             continue
         person = None

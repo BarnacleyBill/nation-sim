@@ -32,7 +32,19 @@ new week (and later, a new issue of the paper) appears each morning.
    words are woven in and explained the first time they appear. Saved as
    HTML plus a JSON copy for a future AI writer.
 5. **Stats page** (done): the state of the nation, with small charts.
-6. Nightly timer.
+6. **Nightly timer** (done, set up on the server).
+7. **Life, leisure and art** (done): every person keeps a record of their
+   big moments, feeding obituaries and a weekly citizen profile. The paper
+   follows running stories (petitions, campaigns with straw polls, hunger,
+   scandal aftermath), recaps each president's term, tracks broken
+   promises, visits one region a week, and looks back one year. A weekly
+   rest day; taverns and a brewer trade, where opinions spread and
+   quarrels start; harvest festivals and a midwinter feast paid for by
+   the president, with wrestling, footraces and archery; a creativity
+   trait and art (songs, stories, carvings, paintings, tapestries) with
+   native titles and verses, which spread, compete, become famous and can
+   mock or praise the president. Presidents may commission art or raise a
+   statue of themselves.
 
 ## Running
 
@@ -63,5 +75,9 @@ Everything lives in `./data`: the nation (`world.json.gz`), the event log
 - `sim/inventions.py` inventions and how they spread
 - `sim/paper.py` the weekly paper
 - `sim/site.py` the stats page and home page
+- `sim/paper_extra.py` follow-ups, recaps, profiles, obituaries, sports, arts
+- `sim/leisure.py` rest days, taverns, festivals and contests
+- `sim/arts.py` art and artists
+- `sim/upgrade.py` brings older saves up to date
 - `sim/engine.py` the daily loop and weekly stats
 - `sim/events.py` the event log the paper reads from

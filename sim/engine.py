@@ -1,6 +1,6 @@
 """The daily loop that moves the nation forward."""
 from . import config as C
-from . import economy, society, lifecycle, weather, government, language, inventions
+from . import economy, society, lifecycle, weather, government, language, inventions, leisure, arts, upgrade
 from .calendar import is_week_start, is_week_end, season, label
 
 
@@ -10,6 +10,7 @@ def tick(w, log):
         government.weekly(w, log)
         language.weekly(w, log, log.between(w.day - 7, w.day - 1))
         inventions.weekly(w, log)
+        arts.weekly(w, log)
         w.week_start_prices = dict(w.prices)
         _season_notice(w, log)
     economy.produce(w, log)
@@ -17,6 +18,9 @@ def tick(w, log):
     economy.market(w, log)
     economy.consume(w, log)
     society.socialize(w)
+    leisure.daily(w)
+    if economy.is_rest_day(w.day):
+        leisure.rest_day(w, log)
     society.update_needs(w)
     society.choose_jobs(w, log)
     society.consider_moves(w, log)
@@ -29,6 +33,7 @@ def tick(w, log):
 
 
 def run(w, log, days):
+    upgrade.ensure_current(w)
     for _ in range(days):
         tick(w, log)
     log.flush()
@@ -80,7 +85,24 @@ def weekly_stats(w):
         if F:
             food_days.append(economy.food_stock(h) / F)
     food_days.sort()
+    wealth = sorted((h.coins for h in hhs), reverse=True)
+    top = wealth[:max(1, len(wealth) // 10)]
+    near_hunger = 0
+    for h in hhs:
+        F = economy.food_need(w, h)
+        if F and economy.food_stock(h) / F < 5 and h.coins < 5 * F * w.prices["grain"]:
+            near_hunger += 1
+    mood = {}
+    for k in w.regions:
+        ps = [p for p in people if p.region == k]
+        ad = [p for p in ps if p.age(w.day) >= 16]
+        mood[k] = {"satisfaction": round(sum(p.satisfaction for p in ps) / len(ps), 3) if ps else 0,
+                   "approval": round(sum(p.approval for p in ad) / len(ad), 3) if ad else 0}
     return {
+        "richest_tenth_share": round(sum(top) / max(1.0, sum(wealth)), 3),
+        "near_hunger_households": near_hunger,
+        "region_mood": mood,
+        "artworks": w.week.get("artworks", 0),
         "day": w.day,
         "label": label(w.day),
         "population": pop,

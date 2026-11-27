@@ -38,6 +38,9 @@ class Person:
     approval: float = 0.6         # opinion of the current president, 0 to 1
     gov_effect: float = 0.0       # how government touched this person this week
     signed_petition: bool = False
+    life: list = field(default_factory=list)      # [day, text] milestones
+    leisure: float = 0.5          # how rested and entertained, 0 to 1
+    art_progress: float = 0.0
 
     @property
     def name(self):
@@ -121,6 +124,8 @@ class World:
     language: dict = field(default_factory=dict)      # see language.py
     inventions: dict = field(default_factory=dict)    # see inventions.py
     paper: dict = field(default_factory=dict)         # see paper.py
+    sports: dict = field(default_factory=dict)        # see leisure.py
+    arts: dict = field(default_factory=dict)          # see arts.py
 
     rng: random.Random = field(default=None, repr=False, compare=False)
 
@@ -138,6 +143,14 @@ class World:
 
     def count(self, key, n=1):
         self.week[key] = self.week.get(key, 0) + n
+
+
+def note(p, day, text):
+    """Add a milestone to a person's life record, keeping their birth and the most recent ones."""
+    from .config import LIFE_RECORD_MAX
+    p.life.append([day, text])
+    if len(p.life) > LIFE_RECORD_MAX:
+        p.life = p.life[:1] + p.life[-(LIFE_RECORD_MAX - 1):]
 
 
 # ---------------------------------------------------------------- saving

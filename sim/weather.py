@@ -86,9 +86,12 @@ def _damage_houses(w, region, chance):
         if house.region == region and w.rng.random() < chance:
             destroyed += 1
             if house.household and house.household in w.households:
+                from .model import note
                 h = w.households[house.household]
                 h.house = None
                 h.homeless_since = w.day
+                for m in h.members:
+                    note(w.people[m], w.day, f"lost the family house to the {'storm' if region in COASTAL else 'flood'}")
             del w.houses[house.id]
     return destroyed
 

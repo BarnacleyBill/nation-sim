@@ -12,7 +12,7 @@ from . import config as C
 from .economy import (is_child, food_need, food_stock, resource_mult, season_mean,
                       skill_mult, labor_mult, house_price, labor_rate, job_counts, producer_counts, sellable_share,
                       builder_premium)
-from .model import Household
+from .model import Household, note
 
 
 # ---------------------------------------------------------------- needs
@@ -72,6 +72,7 @@ def update_needs(w):
             n["social"] = max(0.0, min(1.0, sum(pos) / 2.4 - 0.08 * neg))
             n["standing"] = 0.7 * rank.get(h.id, 0.5) + 0.3 * p.reputation
             n["faith"] = 0.7   # religion arrives in a later stage
+            n["leisure"] = p.leisure
             wts = weights_for(p)
             p.satisfaction = sum(wts[k] * n[k] for k in C.NEEDS) / sum(wts.values())
             p.mood += (p.satisfaction - p.mood) * 0.03
@@ -243,6 +244,7 @@ def choose_jobs(w, log):
             p.job_since = w.day
             p.income_ema = 0.6 * p.income_ema
             switches_left -= 1
+            note(p, w.day, f"became a {best}" + (f", leaving work as a {old}" if old else ""))
             if old:
                 log.add(w.day, "job_change", f"{p.name} gave up work as a {old} to become a {best}.",
                         region=p.region, importance=1, people=[p.id], old=old, new=best)
@@ -358,6 +360,7 @@ def consider_moves(w, log):
             h.coins -= share
             old_region = h.region
             nh = new_household(w, best, [p.id], coins=share)
+            note(p, w.day, f"left home in {w.regions[old_region].town} for {w.regions[best].name}")
             log.add(w.day, "left_home",
                     f"{p.name}, {int(p.age(w.day))}, left the family home in {w.regions[old_region].town} "
                     f"to seek work in {w.regions[best].name}.",
@@ -383,6 +386,8 @@ def _move_household(w, log, h, dest):
         if proj.for_household == h.id:
             proj.for_household = None
     head = w.people[h.members[0]]
+    for m in h.members:
+        note(w.people[m], w.day, f"moved with the household from {w.regions[origin].name} to {w.regions[dest].name}")
     log.add(w.day, "household_moved",
             f"The {head.family} household ({len(h.members)} {'person' if len(h.members) == 1 else 'people'}) moved from {w.regions[origin].name} "
             f"to {w.regions[dest].name}.",
@@ -492,7 +497,9 @@ def marry(w, log, a, b):
                 h.inv["grain"] -= share
                 home.inv["grain"] += share
     where = w.regions[home.region].town
-    note = "" if home.house else " They have no house of their own yet."
-    log.add(w.day, "marriage", f"{a.name} and {b.name} were married in {where}.{note}",
+    note(a, w.day, f"married {b.name} in {where}")
+    note(b, w.day, f"married {a.name} in {where}")
+    extra = "" if home.house else " They have no house of their own yet."
+    log.add(w.day, "marriage", f"{a.name} and {b.name} were married in {where}.{extra}",
             region=home.region, importance=2, people=[a.id, b.id], housed=home.house is not None)
     w.count("marriages")

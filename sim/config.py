@@ -20,12 +20,12 @@ FERTILE_MIN, FERTILE_MAX = 16, 44
 MAX_FRIENDS = 12
 
 # ---------------------------------------------------------------- goods
-GOODS = ["grain", "fish", "meat", "wool", "timber", "stone", "ore", "tools", "cloth"]
+GOODS = ["grain", "fish", "meat", "wool", "timber", "stone", "ore", "tools", "cloth", "ale"]
 FOODS = ["grain", "fish", "meat"]
 PERISHABLE = {"fish": 0.03, "meat": 0.012, "grain": 0.0008}  # share lost per day
 START_PRICES = {
     "grain": 1.0, "fish": 1.1, "meat": 1.8, "wool": 1.2, "timber": 1.0,
-    "stone": 1.2, "ore": 2.0, "tools": 10.0, "cloth": 5.0,
+    "stone": 1.2, "ore": 2.0, "tools": 10.0, "cloth": 5.0, "ale": 1.5,
 }
 PRICE_FLOOR = 0.3      # prices never fall below this share of the start price
 PRICE_CEILING = 8.0    # ...or rise above this multiple of it
@@ -51,6 +51,7 @@ JOBS = {
     "smith":      {"inputs": {"ore": 1.0, "timber": 0.5}, "outputs": {"tools": 0.5}, "resource": None, "season": "flat", "risk": 0.000004},
     "weaver":     {"inputs": {"wool": 2.0}, "outputs": {"cloth": 1.0}, "resource": None, "season": "flat", "risk": 0.000002},
     "builder":    {"outputs": {}, "resource": None, "season": "flat", "risk": 0.00001},
+    "brewer":     {"inputs": {"grain": 1.5}, "outputs": {"ale": 2.0}, "resource": None, "season": "flat", "risk": 0.000002},
 }
 
 # How much each season helps each kind of work.
@@ -89,10 +90,15 @@ NEIGHBORS = {
 }
 
 # ---------------------------------------------------------------- needs
-NEEDS = ["food", "shelter", "work", "family", "social", "standing", "faith"]
+NEEDS = ["food", "shelter", "work", "family", "social", "standing", "faith", "leisure"]
 BASE_WEIGHTS = {"food": 3.0, "shelter": 2.0, "work": 1.5, "family": 1.5,
-                "social": 1.0, "standing": 1.0, "faith": 0.5}
-TRAITS = ["ambition", "greed", "piety", "sociability", "diligence", "warmth", "boldness"]
+                "social": 1.0, "standing": 1.0, "faith": 0.5, "leisure": 0.8}
+TRAITS = ["ambition", "greed", "piety", "sociability", "diligence", "warmth", "boldness", "creativity"]
+
+# ---------------------------------------------------------------- rest and leisure
+REST_DAY = 6                 # the last day of every week is a day off
+WORK_BOOST = 7 / 6           # work days are a little more productive to make up for it
+LIFE_RECORD_MAX = 30         # milestones kept per person
 
 # ---------------------------------------------------------------- money
 START_TREASURY = 2500
@@ -115,4 +121,5 @@ FACILITIES = {
     "mill":    {"labor_days": 150, "weeks": 8,  "name": "a grain mill"},
     "road":    {"labor_days": 200, "weeks": 10, "name": "a new road"},
     "house":   {"labor_days": 0,   "weeks": 4,  "name": "a public house for a homeless family"},
+    "statue":  {"labor_days": 60,  "weeks": 6,  "name": "a statue of the president"},
 }

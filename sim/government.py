@@ -13,6 +13,7 @@ raise their own satisfaction -- which for a president mostly means keeping
 supporters happy and getting re-elected, shaded by personality.
 """
 from . import config as C
+from .model import note
 from .calendar import label
 from .economy import labor_rate, house_price, food_need, food_stock, has_facility
 
@@ -171,6 +172,7 @@ def _finish_facility(w, log, fid, f):
             head = w.people[h.members[0]]
             for m in h.members:
                 w.people[m].gov_effect += 0.3
+                note(w.people[m], w.day, "was given a public house by the government")
             log.add(w.day, "works_done", f"A public house in {region.town} has been given to the "
                     f"{head.family} family, who had no home.", region=f["region"], importance=3,
                     people=[head.id])
@@ -178,6 +180,16 @@ def _finish_facility(w, log, fid, f):
             log.add(w.day, "works_done", f"A public house in {region.town} is finished and stands empty.",
                     region=f["region"], importance=2)
         del w.facilities[fid]
+        return
+    if f["kind"] == "statue":
+        who = w.people.get(f.get("president"))
+        whoname = who.name if who else (w.dead.get(f.get("president"), {}).get("given", "a past president"))
+        for p in w.people.values():
+            p.gov_effect += -0.06 if p.approval < 0.5 else 0.02
+        if who:
+            note(who, w.day, f"had a statue of themselves raised in {region.town}")
+        log.add(w.day, "works_done", f"A statue of President {whoname} has been raised in {region.town}. "
+                "Not everyone is pleased with the cost.", region=f["region"], importance=3, kind="statue")
         return
     for p in w.people.values():
         if p.region == f["region"]:
@@ -294,6 +306,16 @@ def _president_acts(w, log):
         options.append((0.35 + 0.4 * t["greed"] + 0.3 * (treasury > 2500), "lower_tax", {}))
     elif tax_ok and treasury > 4000 and g["sales_tax"] > 0.02:
         options.append((0.3 + 0.4 * t["greed"], "lower_tax", {}))
+    from . import arts
+    if (treasury > 900 and t["ambition"] > 0.55
+            and w.day - arts.ensure(w)["last_commission"] > C.DAYS_PER_YEAR):
+        options.append((0.25 + 0.3 * (t["ambition"] - 0.55) + 0.3 * (pres.approval < 0.4), "commission", {}))
+    capital = max(w.regions, key=lambda r: pop.get(r, 0))
+    if (treasury > 1500 and building < 2 and t["ambition"] + t["greed"] > 1.15
+            and not any(f["kind"] == "statue" and f.get("president") == pres.id for f in w.facilities.values())
+            and not has_facility(w, capital, "statue")):
+        options.append((0.3 + 0.4 * (t["ambition"] + t["greed"] - 1.15), "facility",
+                        {"kind": "statue", "region": capital}))
     if not g.get("invention_reward") and treasury > 1500 and t["ambition"] > 0.5:
         options.append((0.28 * (0.5 + t["ambition"]), "invention_reward", {}))
     if treasury > 400 and t["greed"] > 0.6 and w.rng.random() < (t["greed"] - 0.55) * 0.35:
@@ -322,6 +344,7 @@ def _keep_promise(w, log, pres, kind, region=None, job=None):
 
 
 def _do(w, log, pres, name, args):
+    from . import arts
     g = w.gov
     if name == "relief":
         given = 0.0
@@ -399,6 +422,8 @@ def _do(w, log, pres, name, args):
         for p in w.people.values():
             p.gov_effect += 0.04
         _keep_promise(w, log, pres, "lower_tax")
+    elif name == "commission":
+        arts.commission(w, log, pres)
     elif name == "invention_reward":
         coins = round(labor_rate(w) * 40)
         g["invention_reward"] = {"coins": coins, "until": w.day + C.DAYS_PER_YEAR}
@@ -429,7 +454,7 @@ def _update_approval(w, log):
         mood_effect = (p.satisfaction - 0.8) * 0.3
         friend = p.friends.get(str(pres.id), 0.0) * 0.05
         p.approval += p.gov_effect + mood_effect * 0.3 + friend * 0.3
-        p.approval += (0.55 - p.approval) * 0.04        # opinions settle over time
+        p.approval += (0.5 - p.approval) * 0.06         # opinions settle over time
         p.approval = max(0.0, min(1.0, p.approval))
 
 
@@ -439,6 +464,7 @@ def _scandal(w, log, pres):
     log.add(w.day, "scandal", f"Scandal: President {pres.name} has been found to have taken {total:.0f} coins "
             "from the treasury for their own household.", importance=5, people=[pres.id], coins=round(total, 1))
     pres.reputation = max(0.0, pres.reputation - 0.4)
+    note(pres, w.day, f"was caught taking {total:.0f} coins from the treasury")
     for p in adults(w):
         p.approval = max(0.0, p.approval - (0.25 + 0.15 * p.traits["piety"]))
     g["skims"] = 0
@@ -489,6 +515,7 @@ def _open_campaign(w, log):
         g["candidates"].append({"id": c.id, "promises": promises})
         ptext = "; ".join(pr["text"] for pr in promises) or "no particular promises"
         incumbent = " (the sitting president)" if pres and c.id == pres.id else ""
+        note(c, w.day, "stood for president")
         log.add(w.day, "candidate", f"{c.name}{incumbent}, {int(c.age(w.day))}, a {c.job or 'retired person'} "
                 f"from {w.regions[c.region].name}, is standing for president, promising: {ptext}.",
                 region=c.region, importance=3, people=[c.id], promises=[pr["text"] for pr in promises])
@@ -584,6 +611,15 @@ def _hold_election(w, log):
         g["history"].append({"id": pres.id, "name": pres.name, "start": g["term_start"], "end": w.day,
                              "how": "re-elected" if re else "lost re-election" if pres.id in tally else "stepped down"})
     promises = next(pr for c, pr in cands if c.id == winner.id)
+    note(winner, w.day, f"was {'re-elected' if re else 'elected'} president with {tally[winner.id]} votes")
+    for c, _ in cands:
+        if c.id != winner.id:
+            note(c, w.day, f"lost the election to {winner.name}")
+    # promises not kept by the end of a term are broken
+    if pres:
+        for pr in g["promises"]:
+            log.add(w.day, "promise_broken", f"President {pres.name} ends the term without keeping a promise: "
+                    f"{pr['text']}.", importance=3, people=[pres.id], promise=pr["text"])
     # supporters: which regions gave the winner the most votes, relative to size
     reg = region_votes.get(winner.id, {})
     top = max(reg.values()) if reg else 1
@@ -638,6 +674,7 @@ def _petitions(w, log):
         if w.rng.random() > 0.3 + starter.traits["boldness"] * 0.4:
             return
         g["petition"] = {"started": w.day, "by": starter.id, "signatures": 0}
+        note(starter, w.day, f"started a petition to recall President {pres.name}")
         starter.signed_petition = True
         log.add(w.day, "petition", f"{starter.name} of {w.regions[starter.region].name} has begun a petition to "
                 f"recall President {pres.name}. It needs {int(n * C.PETITION_SHARE) + 1} names in four weeks.",
@@ -686,6 +723,7 @@ def _recall_vote(w, log, pres, people):
         g["history"].append({"id": pres.id, "name": pres.name, "start": g["term_start"], "end": w.day,
                              "how": "recalled"})
         pres.reputation = max(0.0, pres.reputation - 0.2)
+        note(pres, w.day, "was recalled from the presidency")
         w.president = None
         g["promises"] = []
         g["election_day"] = w.day + C.SPECIAL_ELECTION_DAYS

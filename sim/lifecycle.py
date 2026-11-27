@@ -4,7 +4,7 @@ import math
 from . import config as C
 from . import inventions
 from .calendar import DAYS_PER_YEAR
-from .model import Person
+from .model import Person, note
 
 ACCIDENTS = {
     "fisher": "drowned when a boat went down",
@@ -24,9 +24,9 @@ def annual_mortality(age):
         return 0.09
     if age < 5:
         return 0.015
-    if age < 45:
-        return 0.007
-    return 0.007 * math.exp(0.09 * (age - 45))
+    if age < 40:
+        return 0.01
+    return 0.01 * math.exp(0.085 * (age - 40))
 
 
 def daily(w, log, weather_hazard):
@@ -51,7 +51,7 @@ def _births(w, log):
             continue
         fert = 1.0 if age < 35 else max(0.1, 1.0 - (age - 35) * 0.09)
         kids_at_home = sum(1 for c in p.children if c in w.people and w.people[c].age(w.day) < C.ADULT_AGE)
-        chance = 0.0026 * fert * (0.5 + p.mood) * min(1.0, p.fed) * (0.82 ** kids_at_home)
+        chance = 0.0021 * fert * (0.5 + p.mood) * min(1.0, p.fed) * (0.82 ** kids_at_home)
         if rng.random() < chance:
             p.pregnant_until = w.day + 270
 
@@ -75,6 +75,8 @@ def _give_birth(w, log, mother):
                       mother=mother.id, father=father.id if father else None,
                       clothing=C.CLOTHING_LIFE)
         baby.needs = {k: 0.7 for k in C.NEEDS}
+        parents_txt = f"{mother.name} and {father.name}" if father else mother.name
+        note(baby, w.day, f"born in {w.regions[hh.region].town} to {parents_txt}")
         w.people[pid] = baby
         hh.members.append(pid)
         mother.children.append(pid)
@@ -89,6 +91,10 @@ def _give_birth(w, log, mother):
     else:
         b = babies[0]
         text = f"A {'daughter' if b.sex == 'f' else 'son'}, {b.given}, was born to {parents} in {town}."
+    for par in (mother, father):
+        if par:
+            note(par, w.day, f"had {'twins' if n == 2 else ('a daughter' if babies[0].sex == 'f' else 'a son')}, "
+                 + " and ".join(b.given for b in babies))
     log.add(w.day, "birth", text, region=hh.region, importance=2 if n == 2 else 1,
             people=[b.id for b in babies] + [mother.id] + ([father.id] if father else []))
     if rng.random() < 0.012:
@@ -162,13 +168,15 @@ def kill(w, log, p, cause):
     w.dead[p.id] = {"given": p.given, "family": p.family, "sex": p.sex,
                     "birth_day": p.birth_day, "death_day": w.day, "cause": cause,
                     "region": region, "mother": p.mother, "father": p.father,
-                    "spouse": p.spouse, "job": p.job}
+                    "spouse": p.spouse, "job": p.job, "life": list(p.life),
+                    "children": list(p.children), "reputation": p.reputation}
     del w.people[p.id]
     spouse = w.people.get(p.spouse)
     if spouse:
         spouse.spouse = None
         spouse.widowed = True
         spouse.friends.pop(str(p.id), None)
+        note(spouse, w.day, f"was widowed when {p.given} {cause}")
     if p.pregnant_until:
         pass   # the unborn child is lost with the mother
     w.count("deaths")
@@ -233,6 +241,7 @@ def kill(w, log, p, cause):
             region=carer.region, importance=2, people=[k.id for k in kids] + [head.id])
     for k in kids:
         move_person(w, k, carer)
+        note(k, w.day, f"was orphaned, and taken in by the {head.family} household")
 
 
 def _pass_on_house(w, hh, heirs):

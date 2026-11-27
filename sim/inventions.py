@@ -83,6 +83,8 @@ def _invent(w, log, p, key):
     w.inventions[key] = {"inventor": p.id, "inventor_name": p.name, "day": w.day, "region": p.region,
                          "adoption": {r: (0.25 if r == p.region else 0.0) for r in w.regions}}
     p.reputation = min(1.0, p.reputation + 0.2)
+    from .model import note
+    note(p, w.day, f"came up with {spec['name']}")
     town = w.regions[p.region].town
     job = p.job or "worker"
     log.add(w.day, "invention", f"{p.name}, a {job} of {town}, has come up with {spec['name']}.",

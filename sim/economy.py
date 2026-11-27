@@ -145,8 +145,14 @@ def job_counts(w):
 
 
 # ---------------------------------------------------------------- production
+def is_rest_day(day):
+    return day % C.DAYS_PER_WEEK == C.REST_DAY
+
+
 def produce(w, log):
     day = w.day
+    if is_rest_day(day):
+        return
     sname = season(day)
     counts = job_counts(w)
     for hh in w.households.values():
@@ -159,7 +165,7 @@ def produce(w, log):
             mult = (C.SEASON_CURVES[spec["season"]][sname]
                     * resource_mult(region, job, counts.get((hh.region, job), 1))
                     * weather_mult(region, job)
-                    * facility_bonus(w, hh.region, job)
+                    * facility_bonus(w, hh.region, job) * C.WORK_BOOST
                     * inventions.multiplier(w, hh.region, "output", job)
                     * skill_mult(p, job) * labor_mult(p, day))
             if _glutted(w, hh, spec):
@@ -217,6 +223,8 @@ def builder_premium(w, region):
 # ---------------------------------------------------------------- building
 def build(w, log):
     day = w.day
+    if is_rest_day(day):
+        return
     for p in list(w.people.values()):
         if p.job != "builder":
             continue
@@ -241,7 +249,7 @@ def build(w, log):
                 setattr(proj, g, have + moved)
         mat = min(proj.timber / C.HOUSE_TIMBER, proj.stone / C.HOUSE_STONE)
         allowed = C.HOUSE_LABOR_DAYS * mat
-        work = (skill_mult(p, "builder") * labor_mult(p, day) * weather_mult(w.regions[p.region], "builder")
+        work = C.WORK_BOOST * (skill_mult(p, "builder") * labor_mult(p, day) * weather_mult(w.regions[p.region], "builder")
                 * inventions.multiplier(w, p.region, "output", "builder"))
         if proj.progress < allowed:
             proj.progress = min(allowed, proj.progress + work)
@@ -293,6 +301,10 @@ def _finish_project(w, log, proj, builder, bhh):
         client.house = hid
         client.homeless_since = None
         head = w.people[client.members[0]]
+        from .model import note
+        for m in client.members:
+            note(w.people[m], w.day, f"moved into a new house built by {builder.name}")
+        note(builder, w.day, f"built a house for the {head.family} household")
         log.add(w.day, "house_built",
                 f"{builder.name} finished a new house in {w.regions[proj.region].town} for the {head.family} household.",
                 region=proj.region, importance=2, people=[builder.id, head.id], price=round(price, 1))
@@ -458,8 +470,26 @@ def market(w, log):
                 h.inv["cloth"] -= 1
                 p.clothing += C.CLOTHING_LIFE
 
+    # ale: a jug a week for everyone who likes the tavern
+    price = w.prices["ale"]
+    offers, requests = {}, {}
+    for h in hhs:
+        want = sum(1 for m in h.members if drinks(w.people[m], w.day))
+        have = h.inv.get("ale", 0.0)
+        if have - want > 0.01:
+            offers[h.id] = have - want
+        elif want and have < want:
+            q = min(want - have, max(0.0, h.coins * 0.12) / price)
+            if q > 0.05:
+                requests[h.id] = q
+    _clear(w, "ale", offers, requests)
+
     for g in C.GOODS:
         w.avg_prices[g] += (w.prices[g] - w.avg_prices[g]) / 120
+
+
+def drinks(p, day):
+    return p.age(day) >= C.ADULT_AGE and p.traits["sociability"] > 0.4
 
 
 def _material_keep(w, h):
