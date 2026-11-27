@@ -1,0 +1,11 @@
+services:
+  sim:
+    build: .
+    image: nation-sim:local
+    volumes:
+      - ./data:/data
+    # one-off commands, e.g.:
+    #   docker compose run --rm sim found
+    #   docker compose run --rm sim run --days 7
+    #   docker compose run --rm sim events --days 7
+    profiles: ["manual"]
