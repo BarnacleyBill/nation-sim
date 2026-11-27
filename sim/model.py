@@ -120,6 +120,7 @@ class World:
     facilities: dict = field(default_factory=dict)    # "id" -> public works built or under way
     language: dict = field(default_factory=dict)      # see language.py
     inventions: dict = field(default_factory=dict)    # see inventions.py
+    paper: dict = field(default_factory=dict)         # see paper.py
 
     rng: random.Random = field(default=None, repr=False, compare=False)
 

@@ -24,8 +24,14 @@ new week (and later, a new issue of the paper) appears each morning.
    dialects; 14 medieval inventions devised by experienced workers that
    spread through the nation and improve work, food keeping, safety and
    children's health.
-4. The paper.
-5. Stats page.
+4. **The paper** (done): a weekly issue written by four citizen reporters
+   (editor, government, land and markets, town and family), each with
+   their own region and opinions. Front page, government round-up, land
+   and weather, markets table, words and speech, editorial, letters from
+   real citizens, births/marriages/deaths, comings and goings. Native
+   words are woven in and explained the first time they appear. Saved as
+   HTML plus a JSON copy for a future AI writer.
+5. **Stats page** (done): the state of the nation, with small charts.
 6. Nightly timer.
 
 ## Running
@@ -35,7 +41,11 @@ docker compose run --rm sim found            # start a new nation
 docker compose run --rm sim run --days 7     # advance one week
 docker compose run --rm sim status           # summary
 docker compose run --rm sim events --days 7  # what happened
+docker compose up -d web                     # serve data/site (paper + stats)
 ```
+
+Each `run` publishes a new issue of the paper and refreshes the stats page
+in `data/site/`.
 
 Everything lives in `./data`: the nation (`world.json.gz`), the event log
 (`events.db`), and dated snapshots for rewinding.
@@ -51,5 +61,7 @@ Everything lives in `./data`: the nation (`world.json.gz`), the event log
 - `sim/government.py` the president, elections, recalls, taxes and spending
 - `sim/language.py` vocabulary, new words, sound changes and dialects
 - `sim/inventions.py` inventions and how they spread
+- `sim/paper.py` the weekly paper
+- `sim/site.py` the stats page and home page
 - `sim/engine.py` the daily loop and weekly stats
 - `sim/events.py` the event log the paper reads from

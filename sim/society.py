@@ -384,7 +384,7 @@ def _move_household(w, log, h, dest):
             proj.for_household = None
     head = w.people[h.members[0]]
     log.add(w.day, "household_moved",
-            f"The {head.family} household ({len(h.members)} people) moved from {w.regions[origin].name} "
+            f"The {head.family} household ({len(h.members)} {'person' if len(h.members) == 1 else 'people'}) moved from {w.regions[origin].name} "
             f"to {w.regions[dest].name}.",
             region=dest, importance=2, people=list(h.members), origin=origin,
             housed=h.house is not None)

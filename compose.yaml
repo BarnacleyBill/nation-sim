@@ -1,10 +1,25 @@
 services:
+  # The simulation. Run it as one-off commands, e.g.:
+  #   docker compose run --rm sim found
+  #   docker compose run --rm sim run --days 7
+  #   docker compose run --rm sim events --days 7
   sim:
     build: .
     image: nation-sim:local
     volumes:
       - ./data:/data
-    # one-off commands, e.g.:
-    #   docker compose run --rm sim found
-    #   docker compose run --rm sim run --days 7
-    #   docker compose run --rm sim events --days 7
+    network_mode: none
+
+  # Serves the paper and stats page. Caddy points a subdomain at it.
+  web:
+    image: nginx:alpine
+    container_name: nation-web
+    restart: unless-stopped
+    volumes:
+      - ./data/site:/usr/share/nginx/html:ro
+    networks:
+      - proxy_net
+
+networks:
+  proxy_net:
+    external: true

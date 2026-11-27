@@ -65,6 +65,7 @@ NEW_CONCEPTS = {
     "fish_run": ("great run of fish", ("fish", "plenty")),
     "famine": ("famine", ("great", "hunger")),
     "orphan": ("orphan taken in by others", ("child", "keep")),
+    "newspaper": ("the weekly paper", ("people", "call")),
 }
 
 # Which event types first call for which concept.

@@ -10,7 +10,7 @@ import json
 import os
 import sys
 
-from . import storage, engine
+from . import storage, engine, paper, site as website
 from .events import EventLog
 from .genesis import found_nation
 from .calendar import label
@@ -27,6 +27,8 @@ def main(argv=None):
     f.add_argument("--force", action="store_true")
     r = sub.add_parser("run")
     r.add_argument("--days", type=int, default=7)
+    r.add_argument("--no-paper", action="store_true", help="skip publishing the paper")
+    sub.add_parser("paper", help="publish an issue covering the last week")
     sub.add_parser("status")
     e = sub.add_parser("events")
     e.add_argument("--days", type=int, default=7)
@@ -55,14 +57,28 @@ def main(argv=None):
     w = storage.load(args.data)
     log = EventLog(storage.events_path(args.data))
 
+    site = os.path.join(args.data, "site")
     if args.cmd == "run":
         engine.run(w, log, args.days)
+        s = engine.weekly_stats(w)
+        if not args.no_paper:
+            weeks = log.recent_weeks(2)
+            path = paper.publish(w, log, site, s, weeks[1] if len(weeks) > 1 else None)
+            print(f"Published {path}")
+        website.write_stats(w, log, site, s)
+        log.flush()
         storage.save(w, args.data)
         storage.snapshot(w, args.data)
         log.close()
-        s = engine.weekly_stats(w)
         print(f"{s['label']}: population {s['population']}, satisfaction {s['satisfaction']}, "
               f"grain {s['prices']['grain']}")
+    elif args.cmd == "paper":
+        s = engine.weekly_stats(w)
+        weeks = log.recent_weeks(2)
+        print("Published", paper.publish(w, log, site, s, weeks[1] if len(weeks) > 1 else None))
+        website.write_stats(w, log, site, s)
+        log.flush()
+        storage.save(w, args.data)
     elif args.cmd == "status":
         print(json.dumps(engine.weekly_stats(w), indent=2))
     elif args.cmd == "events":

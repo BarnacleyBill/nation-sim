@@ -61,6 +61,11 @@ class EventLog:
                      people=json.loads(r[4]), data=json.loads(r[5]), summary=r[6])
                 for r in cur]
 
+    def recent_weeks(self, n=2):
+        self.flush()
+        cur = self.db.execute("SELECT data FROM weekly_stats ORDER BY week_end_day DESC LIMIT ?", (n,))
+        return [json.loads(r[0]) for r in cur]
+
     def close(self):
         self.flush()
         self.db.close()
