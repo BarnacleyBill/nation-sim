@@ -192,6 +192,8 @@ def _expire_policies(w, log):
         if s["until"] <= w.day:
             del g["subsidies"][job]
             log.add(w.day, "subsidy_ended", f"The subsidy for {job}s has ended.", importance=2, job=job)
+    if g.get("invention_reward") and g["invention_reward"]["until"] <= w.day:
+        g["invention_reward"] = None
     if g["price_cap"] and g["price_cap"]["until"] <= w.day:
         g["price_cap"] = None
         log.add(w.day, "price_cap_ended", "The cap on the price of grain has been lifted.", importance=3)
@@ -279,16 +281,21 @@ def _president_acts(w, log):
     customary = C.START_PRICES["grain"] * g["price_level"]
     if not g["price_cap"] and w.prices["grain"] > 2.5 * customary and n_hungry >= 10:
         options.append((0.5 * (0.5 + t["warmth"]), "price_cap", {"max": round(2.0 * customary, 3)}))
-    # money matters
-    if treasury < 300:
+    # money matters (tax changes no more than once a season)
+    tax_ok = w.day - g.get("last_tax_change", -999) >= 91
+    if treasury < 300 and not tax_ok and t["boldness"] <= 0.5:
+        pass
+    elif treasury < 300:
         if t["boldness"] > 0.5:
             options.append((0.6 + t["boldness"] * 0.4, "mint", {}))
         else:
             options.append((0.6, "raise_tax", {}))
-    elif treasury > 1200 and (g["sales_tax"] > 0.06 or g["head_tax"] > 0):
+    elif tax_ok and treasury > 1200 and (g["sales_tax"] > 0.06 or g["head_tax"] > 0):
         options.append((0.35 + 0.4 * t["greed"] + 0.3 * (treasury > 2500), "lower_tax", {}))
-    elif treasury > 4000 and g["sales_tax"] > 0.02:
+    elif tax_ok and treasury > 4000 and g["sales_tax"] > 0.02:
         options.append((0.3 + 0.4 * t["greed"], "lower_tax", {}))
+    if not g.get("invention_reward") and treasury > 1500 and t["ambition"] > 0.5:
+        options.append((0.28 * (0.5 + t["ambition"]), "invention_reward", {}))
     if treasury > 400 and t["greed"] > 0.6 and w.rng.random() < (t["greed"] - 0.55) * 0.35:
         options.append((1.0, "skim", {}))
 
@@ -370,6 +377,7 @@ def _do(w, log, pres, name, args):
         for p in w.people.values():
             p.gov_effect -= 0.02 * p.traits["greed"]
     elif name == "raise_tax":
+        g["last_tax_change"] = w.day
         old = g["sales_tax"]
         if old < C.MAX_SALES_TAX:
             g["sales_tax"] = round(min(C.MAX_SALES_TAX, old + 0.02), 3)
@@ -381,6 +389,7 @@ def _do(w, log, pres, name, args):
         for p in w.people.values():
             p.gov_effect -= 0.05
     elif name == "lower_tax":
+        g["last_tax_change"] = w.day
         if g["head_tax"] > 0:
             g["head_tax"] = round(max(0.0, g["head_tax"] - 0.1), 2)
         else:
@@ -390,6 +399,12 @@ def _do(w, log, pres, name, args):
         for p in w.people.values():
             p.gov_effect += 0.04
         _keep_promise(w, log, pres, "lower_tax")
+    elif name == "invention_reward":
+        coins = round(labor_rate(w) * 40)
+        g["invention_reward"] = {"coins": coins, "until": w.day + C.DAYS_PER_YEAR}
+        log.add(w.day, "invention_reward_offered", f"President {pres.name} has offered {coins} coins to anyone "
+                "who devises a better way of working, for the next year.", importance=3, people=[pres.id],
+                coins=coins)
     elif name == "skim":
         amount = round(w.treasury * w.rng.uniform(0.03, 0.08), 1)
         w.treasury -= amount

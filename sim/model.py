@@ -118,6 +118,8 @@ class World:
     demand: dict = field(default_factory=dict)        # good -> units households want per day (smoothed)
     gov: dict = field(default_factory=dict)           # government state, see government.py
     facilities: dict = field(default_factory=dict)    # "id" -> public works built or under way
+    language: dict = field(default_factory=dict)      # see language.py
+    inventions: dict = field(default_factory=dict)    # see inventions.py
 
     rng: random.Random = field(default=None, repr=False, compare=False)
 

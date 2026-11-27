@@ -8,6 +8,7 @@ until the government starts minting.
 import math
 
 from . import config as C
+from . import inventions
 from .calendar import season
 
 OUTDOOR = {"farmer", "fisher", "herder", "woodcutter", "quarrier", "builder"}
@@ -159,6 +160,7 @@ def produce(w, log):
                     * resource_mult(region, job, counts.get((hh.region, job), 1))
                     * weather_mult(region, job)
                     * facility_bonus(w, hh.region, job)
+                    * inventions.multiplier(w, hh.region, "output", job)
                     * skill_mult(p, job) * labor_mult(p, day))
             if _glutted(w, hh, spec):
                 # nobody is buying: work slackens and the time goes to rest
@@ -239,7 +241,8 @@ def build(w, log):
                 setattr(proj, g, have + moved)
         mat = min(proj.timber / C.HOUSE_TIMBER, proj.stone / C.HOUSE_STONE)
         allowed = C.HOUSE_LABOR_DAYS * mat
-        work = skill_mult(p, "builder") * labor_mult(p, day) * weather_mult(w.regions[p.region], "builder")
+        work = (skill_mult(p, "builder") * labor_mult(p, day) * weather_mult(w.regions[p.region], "builder")
+                * inventions.multiplier(w, p.region, "output", "builder"))
         if proj.progress < allowed:
             proj.progress = min(allowed, proj.progress + work)
             p.skills["builder"] = p.skills.get("builder", 0) + 1
@@ -500,6 +503,7 @@ def consume(w, log):
         for g, rate in C.PERISHABLE.items():
             if g == "grain" and granary:
                 rate *= 0.4
+            rate *= inventions.multiplier(w, h.region, "spoil", g)
             h.inv[g] *= (1 - rate)
     _kin_support(w, log)
 

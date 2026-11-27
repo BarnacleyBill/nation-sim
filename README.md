@@ -17,7 +17,13 @@ new week (and later, a new issue of the paper) appears each morning.
    70% to remove), market and head taxes, minting with slow inflation,
    subsidies, grain price caps, relief, public works (wells, granaries,
    mills, roads, public houses), and greedy presidents who may skim.
-3. Language and inventions.
+3. **Language and inventions** (done): a core vocabulary from the start;
+   new words coined the first time something happens (by joining old
+   words, naming after a person, or from scratch); words spreading region
+   by region; sound changes that start in one region and spread, making
+   dialects; 14 medieval inventions devised by experienced workers that
+   spread through the nation and improve work, food keeping, safety and
+   children's health.
 4. The paper.
 5. Stats page.
 6. Nightly timer.
@@ -43,5 +49,7 @@ Everything lives in `./data`: the nation (`world.json.gz`), the event log
 - `sim/lifecycle.py` births and deaths
 - `sim/weather.py` weather and natural events
 - `sim/government.py` the president, elections, recalls, taxes and spending
+- `sim/language.py` vocabulary, new words, sound changes and dialects
+- `sim/inventions.py` inventions and how they spread
 - `sim/engine.py` the daily loop and weekly stats
 - `sim/events.py` the event log the paper reads from

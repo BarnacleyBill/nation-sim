@@ -2,6 +2,7 @@
 import math
 
 from . import config as C
+from . import inventions
 from .calendar import DAYS_PER_YEAR
 from .model import Person
 
@@ -134,6 +135,8 @@ def _deaths(w, log, weather_hazard):
             continue
         age = p.age(w.day)
         hz = annual_mortality(age) / DAYS_PER_YEAR * weather_hazard.get(p.region, 1.0) * wells.get(p.region, 1.0)
+        if age < 5:
+            hz *= inventions.multiplier(w, p.region, "health", "child")
         if p.hunger > 20:
             hz += 0.01 * (p.hunger - 20) / 10
         if rng.random() < hz:
@@ -147,7 +150,7 @@ def _deaths(w, log, weather_hazard):
                 cause = "died of an illness"
             kill(w, log, p, cause)
             continue
-        if p.job and rng.random() < C.JOBS[p.job]["risk"]:
+        if p.job and rng.random() < C.JOBS[p.job]["risk"] * inventions.multiplier(w, p.region, "safety", p.job):
             kill(w, log, p, ACCIDENTS.get(p.job, "died in an accident"))
 
 
@@ -176,8 +179,11 @@ def kill(w, log, p, cause):
     if w.president == p.id:
         importance = 5
     town = w.regions[region].town
-    desc = f"a {p.job}" if p.job else ("a child" if age < 14 else "")
-    who = f"{p.name}, {age}" + (f", {desc}" if desc else "") + f", of {town}"
+    if age < 1:
+        who = f"{p.name}, an infant of {town}"
+    else:
+        desc = f"a {p.job}" if p.job else ("a child" if age < 14 else "")
+        who = f"{p.name}, {age}" + (f", {desc}" if desc else "") + f", of {town}"
     log.add(w.day, "death", f"{who}, {cause}.", region=region, importance=importance,
             people=[p.id], age=age, cause=cause, was_president=(w.president == p.id))
     if w.president == p.id:

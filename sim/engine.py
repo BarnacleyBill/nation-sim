@@ -1,6 +1,6 @@
 """The daily loop that moves the nation forward."""
 from . import config as C
-from . import economy, society, lifecycle, weather, government
+from . import economy, society, lifecycle, weather, government, language, inventions
 from .calendar import is_week_start, is_week_end, season, label
 
 
@@ -8,6 +8,8 @@ def tick(w, log):
     if is_week_start(w.day):
         w.hazard = weather.weekly(w, log)
         government.weekly(w, log)
+        language.weekly(w, log, log.between(w.day - 7, w.day - 1))
+        inventions.weekly(w, log)
         w.week_start_prices = dict(w.prices)
         _season_notice(w, log)
     economy.produce(w, log)
@@ -20,6 +22,7 @@ def tick(w, log):
     society.consider_moves(w, log)
     society.courtship(w, log)
     lifecycle.daily(w, log, w.hazard)
+    inventions.daily(w, log)
     if is_week_end(w.day):
         _week_end(w, log)
     w.day += 1
@@ -98,4 +101,8 @@ def weekly_stats(w):
         "median_food_days": round(food_days[len(food_days) // 2], 1) if food_days else 0,
         "hungry": sum(1 for p in people if p.hunger >= 5),
         "government": government.summary(w),
+        "new_words": w.week.get("new_words", 0),
+        "words_known": len(language.ensure(w)["words"]),
+        "dialect_words": len(language.dialect_words(w)),
+        "inventions": [k for k in inventions.ensure(w)],
     }

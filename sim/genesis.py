@@ -74,7 +74,9 @@ def found_nation(seed):
     _seed_friendships(w, rng)
     _first_president(w, rng)
     from .government import ensure
+    from . import language
     ensure(w)
+    language.ensure(w)
     return w
 
 
