@@ -35,6 +35,9 @@ class Person:
     widowed: bool = False
     income_ema: float = 0.0       # recent daily earnings
     job_since: int = 0
+    approval: float = 0.6         # opinion of the current president, 0 to 1
+    gov_effect: float = 0.0       # how government touched this person this week
+    signed_petition: bool = False
 
     @property
     def name(self):
@@ -113,6 +116,8 @@ class World:
     hazard: dict = field(default_factory=dict)      # region -> extra death risk this week
     sell_through: dict = field(default_factory=dict)  # good -> share of goods offered that sold
     demand: dict = field(default_factory=dict)        # good -> units households want per day (smoothed)
+    gov: dict = field(default_factory=dict)           # government state, see government.py
+    facilities: dict = field(default_factory=dict)    # "id" -> public works built or under way
 
     rng: random.Random = field(default=None, repr=False, compare=False)
 

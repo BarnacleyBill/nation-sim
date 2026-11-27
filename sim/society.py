@@ -183,6 +183,9 @@ def job_value(w, p, job, region_key, counts, producers, extra=1):
         value += price * (own + min(made - own, market))
     for g, q in spec.get("inputs", {}).items():
         value -= q * mult * (0.25 * w.prices[g] + 0.75 * w.avg_prices[g])
+    sub = w.gov.get("subsidies", {}).get(job)
+    if sub:
+        value += sub["rate"]
     return value
 
 

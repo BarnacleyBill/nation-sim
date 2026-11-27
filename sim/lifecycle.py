@@ -126,12 +126,14 @@ def _choose_name(w, sex, mother, father):
 
 # ---------------------------------------------------------------- deaths
 def _deaths(w, log, weather_hazard):
+    from .economy import has_facility
     rng = w.rng
+    wells = {r: 0.88 for r in w.regions if has_facility(w, r, "well", include_building=False)}
     for p in list(w.people.values()):
         if p.id not in w.people:
             continue
         age = p.age(w.day)
-        hz = annual_mortality(age) / DAYS_PER_YEAR * weather_hazard.get(p.region, 1.0)
+        hz = annual_mortality(age) / DAYS_PER_YEAR * weather_hazard.get(p.region, 1.0) * wells.get(p.region, 1.0)
         if p.hunger > 20:
             hz += 0.01 * (p.hunger - 20) / 10
         if rng.random() < hz:
@@ -180,6 +182,8 @@ def kill(w, log, p, cause):
             people=[p.id], age=age, cause=cause, was_president=(w.president == p.id))
     if w.president == p.id:
         w.president = None
+        from .government import on_president_died
+        on_president_died(w, log, p.id)
 
     if not hh:
         return

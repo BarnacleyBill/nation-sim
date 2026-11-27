@@ -1,12 +1,13 @@
 """The daily loop that moves the nation forward."""
 from . import config as C
-from . import economy, society, lifecycle, weather
+from . import economy, society, lifecycle, weather, government
 from .calendar import is_week_start, is_week_end, season, label
 
 
 def tick(w, log):
     if is_week_start(w.day):
         w.hazard = weather.weekly(w, log)
+        government.weekly(w, log)
         w.week_start_prices = dict(w.prices)
         _season_notice(w, log)
     economy.produce(w, log)
@@ -96,5 +97,5 @@ def weekly_stats(w):
         "treasury": round(w.treasury, 1),
         "median_food_days": round(food_days[len(food_days) // 2], 1) if food_days else 0,
         "hungry": sum(1 for p in people if p.hunger >= 5),
-        "president": w.people[w.president].name if w.president in w.people else None,
+        "government": government.summary(w),
     }

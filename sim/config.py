@@ -97,3 +97,22 @@ TRAITS = ["ambition", "greed", "piety", "sociability", "diligence", "warmth", "b
 # ---------------------------------------------------------------- money
 START_TREASURY = 2500
 START_COINS_PER_PERSON = 45
+
+# ---------------------------------------------------------------- government
+TERM_DAYS = 182              # six months
+CAMPAIGN_DAYS = 28           # candidates announce four weeks before the vote
+SPECIAL_ELECTION_DAYS = 21   # after a recall or a death in office
+PETITION_DAYS = 28           # how long a recall petition can gather names
+PETITION_SHARE = 0.25        # share of adults who must sign to force a recall vote
+RECALL_SHARE = 0.70          # share of votes needed to remove the president
+START_SALES_TAX = 0.05       # share of every market sale paid to the treasury
+MAX_SALES_TAX = 0.20
+
+# Public works: labor_days sets the cost (paid out as wages), weeks the build time.
+FACILITIES = {
+    "well":    {"labor_days": 30,  "weeks": 3,  "name": "a public well"},
+    "granary": {"labor_days": 80,  "weeks": 6,  "name": "a public granary"},
+    "mill":    {"labor_days": 150, "weeks": 8,  "name": "a grain mill"},
+    "road":    {"labor_days": 200, "weeks": 10, "name": "a new road"},
+    "house":   {"labor_days": 0,   "weeks": 4,  "name": "a public house for a homeless family"},
+}

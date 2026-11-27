@@ -12,8 +12,11 @@ new week (and later, a new issue of the paper) appears each morning.
 
 1. **Core simulation** (done): land, weather, citizens, needs, jobs, trade
    in coins, houses and builders, births, deaths, inheritance, migration.
-2. Government: president, 6-month terms, elections, recalls, taxes,
-   minting, subsidies, public works.
+2. **Government** (done): president, 6-month terms, campaigns with
+   promises, elections, recall petitions and votes (25% to force a vote,
+   70% to remove), market and head taxes, minting with slow inflation,
+   subsidies, grain price caps, relief, public works (wells, granaries,
+   mills, roads, public houses), and greedy presidents who may skim.
 3. Language and inventions.
 4. The paper.
 5. Stats page.
@@ -39,5 +42,6 @@ Everything lives in `./data`: the nation (`world.json.gz`), the event log
 - `sim/society.py` needs, friendships, jobs, moving, marriage
 - `sim/lifecycle.py` births and deaths
 - `sim/weather.py` weather and natural events
+- `sim/government.py` the president, elections, recalls, taxes and spending
 - `sim/engine.py` the daily loop and weekly stats
 - `sim/events.py` the event log the paper reads from

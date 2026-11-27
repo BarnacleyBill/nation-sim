@@ -111,6 +111,29 @@ def producer_counts(w):
     return out
 
 
+def facility_bonus(w, region, job):
+    m = 1.0
+    for f in w.facilities.values():
+        if f["status"] != "done" or f["region"] != region:
+            continue
+        if f["kind"] == "mill" and job == "farmer":
+            m *= 1.12
+        elif f["kind"] == "road" and job in ("farmer", "fisher", "herder", "woodcutter", "quarrier", "miner"):
+            m *= 1.04
+    return m
+
+
+def has_facility(w, region, kind, include_building=True):
+    return any(f["region"] == region and f["kind"] == kind
+               and (include_building or f["status"] == "done")
+               for f in w.facilities.values())
+
+
+def customary_price(w, good):
+    """The price people think is normal, which rises as more money circulates."""
+    return C.START_PRICES[good] * w.gov.get("price_level", 1.0)
+
+
 def job_counts(w):
     counts = {}
     for p in w.people.values():
@@ -135,6 +158,7 @@ def produce(w, log):
             mult = (C.SEASON_CURVES[spec["season"]][sname]
                     * resource_mult(region, job, counts.get((hh.region, job), 1))
                     * weather_mult(region, job)
+                    * facility_bonus(w, hh.region, job)
                     * skill_mult(p, job) * labor_mult(p, day))
             if _glutted(w, hh, spec):
                 # nobody is buying: work slackens and the time goes to rest
@@ -281,7 +305,7 @@ def _finish_project(w, log, proj, builder, bhh):
 def willing_share(w, good):
     """Sellers hold back when the price is below the customary price.
     Perishable goods must be sold soon, so their sellers hold back less."""
-    ratio = w.prices[good] / C.START_PRICES[good]
+    ratio = w.prices[good] / customary_price(w, good)
     power = 0.7 if good in ("fish", "meat") else 1.5
     return min(1.0, max(0.05, ratio ** power))
 
@@ -294,13 +318,18 @@ def _clear(w, good, offers, requests):
     total_r = sum(requests.values())
     traded = min(total_o, total_r)
     price = w.prices[good]
+    tax = w.gov.get("sales_tax", 0.0)
+    tax_week = w.gov.setdefault("tax_week", {})
     if traded > 1e-9:
         fo, fr = traded / total_o, traded / total_r
         for hid, q in offers.items():
             hh = w.households[hid]
             sold = q * fo
             hh.inv[good] -= sold
-            hh.coins += sold * price
+            hh.coins += sold * price * (1 - tax)
+            if tax:
+                w.treasury += sold * price * tax
+                tax_week[str(hid)] = tax_week.get(str(hid), 0.0) + sold * price * tax
         for hid, q in requests.items():
             hh = w.households[hid]
             got = q * fr
@@ -312,8 +341,12 @@ def _clear(w, good, offers, requests):
     else:
         ratio = (total_r + 0.5) / (total_o + 0.5)
         price *= min(1.03, max(0.97, ratio ** 0.08))
-    base = C.START_PRICES[good]
-    w.prices[good] = min(base * C.PRICE_CEILING, max(base * C.PRICE_FLOOR, price))
+    base = customary_price(w, good)
+    price = min(base * C.PRICE_CEILING, max(base * C.PRICE_FLOOR, price))
+    cap = w.gov.get("price_cap")
+    if cap and cap["good"] == good:
+        price = min(price, cap["max"])
+    w.prices[good] = price
     w.last_trade[good] = traded
     w.demand[good] = 0.97 * w.demand.get(good, total_r) + 0.03 * total_r
     st = traded / total_o if total_o > 1e-9 else 1.0
@@ -463,7 +496,10 @@ def consume(w, log):
             else:
                 p.hunger = max(0, p.hunger - 2)
             p.clothing = max(-1, p.clothing - 1)
+        granary = has_facility(w, h.region, "granary", include_building=False)
         for g, rate in C.PERISHABLE.items():
+            if g == "grain" and granary:
+                rate *= 0.4
             h.inv[g] *= (1 - rate)
     _kin_support(w, log)
 
