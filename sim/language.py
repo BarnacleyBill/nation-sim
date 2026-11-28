@@ -205,7 +205,12 @@ def coin(w, log, concept, meaning, region, person=None, invention=False):
              "established": False}
     lang["words"][concept] = entry
     if how == "compound":
-        lit = "-".join(lang["words"][p]["meaning"].replace("to ", "") for p in parts)
+        def bare(m):
+            for lead in ("the ", "to ", "a "):
+                if m.startswith(lead):
+                    m = m[len(lead):]
+            return m
+        lit = "-".join(bare(lang["words"][p]["meaning"]) for p in parts)
         origin = f"a joining of older words meaning '{lit}'"
     elif how == "eponym":
         origin = f"named after {parts[0]}"

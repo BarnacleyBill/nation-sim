@@ -26,13 +26,15 @@ def mood_word(x):
 
 
 def approval_word(x):
-    if x >= 0.75:
+    if x >= 0.7:
         return "warmly"
     if x >= 0.55:
         return "well enough"
-    if x >= 0.4:
+    if x >= 0.45:
+        return "with mixed feelings"
+    if x >= 0.3:
         return "with growing doubt"
-    if x >= 0.25:
+    if x >= 0.2:
         return "poorly"
     return "with open anger"
 
@@ -420,3 +422,84 @@ def arts_section(w, st, events, wr):
 
 def taverns(events):
     return [esc(e["summary"]) for e in events if e["type"] == "tavern_quarrel"][:4]
+
+
+# ---------------------------------------------------------------- stories from the week's numbers
+ORDINAL = {2: "Second", 3: "Third", 4: "Fourth", 5: "Fifth", 6: "Sixth", 7: "Seventh", 8: "Eighth"}
+NUMBER = {2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six", 7: "Seven", 8: "Eight", 9: "Nine", 10: "Ten"}
+
+
+def price_moves(w, stats_prev):
+    prev = (stats_prev or {}).get("prices", {})
+    out = {}
+    for g, now in w.prices.items():
+        old = prev.get(g)
+        if old:
+            out[g] = (now - old) / old
+    return out
+
+
+def market_trend(w, st, moves):
+    """A story when most prices move the same way, counting how many weeks it has run."""
+    from .economy import customary_price
+    from .calendar import season
+    downs = sorted((g for g, c in moves.items() if c <= -0.05), key=lambda g: moves[g])
+    ups = sorted((g for g, c in moves.items() if c >= 0.05), key=lambda g: -moves[g])
+    trend = st.setdefault("price_trend", {"dir": None, "weeks": 0})
+    if len(downs) >= 5:
+        direction, movers = "down", downs
+    elif len(ups) >= 5:
+        direction, movers = "up", ups
+    else:
+        st["price_trend"] = {"dir": None, "weeks": 0}
+        return None
+    weeks = trend["weeks"] + 1 if trend["dir"] == direction else 1
+    st["price_trend"] = {"dir": direction, "weeks": weeks}
+    verb = "Fall" if direction == "down" else "Rise"
+    head = f"Prices {verb} for the {ORDINAL[weeks]} Week" if 2 <= weeks <= 8 else f"Prices {verb} Across the Market"
+    paras = [f"Prices {'fell' if direction == 'down' else 'rose'} for {len(movers)} of the {len(moves)} goods at "
+             f"market this week" + (f", the {weeks}{'nd' if weeks == 2 else 'rd' if weeks == 3 else 'th'} week "
+                                    "running." if weeks >= 2 else ".")]
+    g = moves.get("grain")
+    if g is not None:
+        vs = w.prices["grain"] / customary_price(w, "grain") - 1
+        paras.append(f"Grain {'fell' if g < 0 else 'rose'} {abs(g):.0%} to {w.prices['grain']:.2f} coins, "
+                     f"{abs(vs):.0%} {'below' if vs < 0 else 'above'} what people think of as a fair price.")
+    big = [m for m in movers if m != "grain"][:3]
+    if big:
+        paras.append("The biggest moves were in " + ", ".join(f"{m} ({abs(moves[m]):.0%})" for m in big) + ".")
+    if season(w.day) == "autumn" and direction == "down":
+        paras.append("It is harvest season.")
+    return {"section": "land", "score": 35, "beat": "land", "headline": head, "paras": paras}
+
+
+def week_roundup(w, events):
+    """A story when families had a busy week: weddings, births and deaths."""
+    counts = {"birth": [], "marriage": [], "death": []}
+    for e in events:
+        if e["type"] in counts:
+            counts[e["type"]].append(e)
+    total = sum(len(v) for v in counts.values())
+    if total < 3:
+        return None
+    m, b, d = len(counts["marriage"]), len(counts["birth"]), len(counts["death"])
+    if m >= max(b, d) and m >= 2:
+        head = f"{NUMBER.get(m, str(m))} Weddings This Week"
+    elif b >= max(m, d) and b >= 2:
+        head = f"{NUMBER.get(b, str(b))} Births This Week"
+    else:
+        head = "A Busy Week for Families"
+    parts = []
+    for n, word in ((m, "wedding"), (b, "birth"), (d, "death")):
+        if n:
+            parts.append(f"{n} {word}{'s' if n != 1 else ''}")
+    towns = {}
+    for e in counts["marriage"] + counts["birth"]:
+        towns[e.get("region")] = towns.get(e.get("region"), 0) + 1
+    paras = ["This week brought " + (", ".join(parts[:-1]) + " and " + parts[-1] if len(parts) > 1 else parts[0])
+             + ". The full list is under Births, Marriages and Deaths."]
+    if towns:
+        top = max(towns, key=towns.get)
+        if top in w.regions and towns[top] >= 2:
+            paras.append(f"{esc(rname(w, top))} saw the most, with {towns[top]}.")
+    return {"section": "people", "score": 31, "beat": "people", "headline": head, "paras": paras}

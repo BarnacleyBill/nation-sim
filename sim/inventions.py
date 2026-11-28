@@ -92,6 +92,7 @@ def _invent(w, log, p, key):
     reward = w.gov.get("invention_reward")
     if reward and w.treasury >= reward["coins"]:
         w.treasury -= reward["coins"]
+        w.count("treasury_out", reward["coins"])
         w.households[p.household].coins += reward["coins"]
         log.add(w.day, "invention_reward", f"{p.name} was paid the president's reward of {reward['coins']:.0f} "
                 "coins for the invention.", region=p.region, importance=2, people=[p.id])

@@ -101,6 +101,7 @@ def _collect_and_pay(w, log):
             paid = min(due, max(0.0, h.coins))
             h.coins -= paid
             w.treasury += paid
+            w.count("treasury_in", paid)
             record_sales_tax(w, h.id, paid)
     # tax burden lowers opinion of the government
     rate = max(0.2, labor_rate(w)) * 7
@@ -122,6 +123,7 @@ def _collect_and_pay(w, log):
             del g["subsidies"][job]
             continue
         w.treasury -= total
+        w.count("treasury_out", total)
         for p in workers:
             w.households[p.household].coins += s["rate"] * 7
             p.gov_effect += 0.04
@@ -139,6 +141,7 @@ def _collect_and_pay(w, log):
             continue
         f["stalled"] = False
         w.treasury -= pay
+        w.count("treasury_out", pay)
         f["paid"] += pay
         hired = [h for h in w.households.values() if h.region == f["region"] and h.members]
         if hired and pay > 0:
@@ -356,6 +359,7 @@ def _do(w, log, pres, name, args):
                 if amt > w.treasury:
                     break
                 w.treasury -= amt
+                w.count("treasury_out", amt)
                 h.coins += amt
                 given += amt
                 for m in h.members:
@@ -394,6 +398,7 @@ def _do(w, log, pres, name, args):
     elif name == "mint":
         amount = round(money_supply(w) * w.rng.uniform(0.04, 0.08))
         w.treasury += amount
+        w.count("minted", amount)
         g["minted"] += amount
         log.add(w.day, "mint", f"President {pres.name} ordered {amount} new coins struck to refill the treasury.",
                 importance=3, people=[pres.id], coins=amount)

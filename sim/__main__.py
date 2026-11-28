@@ -60,7 +60,7 @@ def main(argv=None):
     site = os.path.join(args.data, "site")
     if args.cmd == "run":
         engine.run(w, log, args.days)
-        s = engine.weekly_stats(w)
+        s = _this_week(w, log)
         if not args.no_paper:
             weeks = log.recent_weeks(2)
             path = paper.publish(w, log, site, s, weeks[1] if len(weeks) > 1 else None)
@@ -73,7 +73,7 @@ def main(argv=None):
         print(f"{s['label']}: population {s['population']}, satisfaction {s['satisfaction']}, "
               f"grain {s['prices']['grain']}")
     elif args.cmd == "paper":
-        s = engine.weekly_stats(w)
+        s = _this_week(w, log)
         weeks = log.recent_weeks(2)
         print("Published", paper.publish(w, log, site, s, weeks[1] if len(weeks) > 1 else None))
         website.write_stats(w, log, site, s)
@@ -85,6 +85,14 @@ def main(argv=None):
         for ev in log.between(w.day - args.days, w.day, args.min):
             print(f"[{label(ev['day'])}] {ev['summary']}")
     log.close()
+
+
+def _this_week(w, log):
+    """The statistics saved at the end of the last full week (its weekly counts are still intact)."""
+    rows = log.recent_weeks(1)
+    if rows and rows[0].get("day", -1) >= w.day - 7:
+        return rows[0]
+    return engine.weekly_stats(w)
 
 
 if __name__ == "__main__":

@@ -299,6 +299,7 @@ def dissolve_household(w, h, heirs=()):
                 x.inv[g] = x.inv.get(g, 0.0) + q * share
     else:
         w.treasury += h.coins
+        w.count("treasury_in", h.coins)
     if h.house and h.house in w.houses:
         w.houses[h.house].household = None
     for proj in list(w.projects.values()):

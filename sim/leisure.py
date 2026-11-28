@@ -152,6 +152,7 @@ def _festival(w, log, kind):
             p.approval = max(0.0, p.approval - 0.06)
         return set()
     w.treasury -= cost
+    w.count("treasury_out", cost)
     # most of the money goes on food and drink bought from local households
     hhs = [h for h in w.households.values() if h.members]
     for h in w.rng.sample(hhs, min(len(hhs), 25)):

@@ -263,6 +263,7 @@ def commission(w, log, pres):
     if w.treasury < coins:
         return False
     w.treasury -= coins
+    w.count("treasury_out", coins)
     w.households[artist.household].coins += coins
     arts["commissions"][str(artist.id)] = {"by": pres.id, "day": w.day}
     arts["last_commission"] = w.day

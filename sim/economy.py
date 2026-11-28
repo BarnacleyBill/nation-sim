@@ -344,6 +344,7 @@ def _clear(w, good, offers, requests):
             hh.coins += sold * price * (1 - tax)
             if tax:
                 w.treasury += sold * price * tax
+                w.count("treasury_in", sold * price * tax)
                 tax_week[str(hid)] = tax_week.get(str(hid), 0.0) + sold * price * tax
         for hid, q in requests.items():
             hh = w.households[hid]

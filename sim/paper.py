@@ -301,7 +301,7 @@ def articles(w, st, events, wr):
         if e["type"] == "works_begun":
             kind = e["data"].get("kind")
             concept = {"house": "public_house"}.get(kind, kind)
-            text = (f"{esc(person_name(w, e['people'][0]))} has ordered "
+            text = (f"President {esc(person_name(w, e['people'][0]))} has ordered "
                     f"{wr.word(concept, C.FACILITIES[kind]['name'], e['region'])} built in {esc(rname(w, e['region']))}, "
                     f"at a cost of {e['data'].get('cost', 0):.0f} coins.")
         if e["type"] == "tax_up":
@@ -333,7 +333,9 @@ def articles(w, st, events, wr):
         r = e["region"]
         body = esc(e["summary"])
         if e["type"] in concepts:
-            body += f" Folk there are calling it {wr.word(concepts[e['type']], e['type'].replace('harvest_', '').replace('_', ' '), r)}."
+            called = wr.word(concepts[e['type']], e['type'].replace('harvest_', '').replace('_', ' '), r)
+            if called.startswith("<i>"):
+                body += f" Folk there are calling it {called}."
         paras = [body]
         q = quote(w, wr, region=r, about="life")
         if q and e["type"] in ("storm", "drought", "flood", "harvest_blight", "fish_gone"):
@@ -471,48 +473,171 @@ def words_corner(w, events, wr):
     return lines
 
 
-def letters(w, st, wr, max_letters=2):
-    """Letters from citizens with something real to say."""
-    pres = w.people.get(w.president)
+def _letter_options(w, p, week_events, price_moves, pres):
+    """Every letter this citizen could truthfully write this week, as (kind, text)."""
     out = []
-    adults = [p for p in w.people.values() if p.age(w.day) >= C.ADULT_AGE and p.id != w.president
-              and p.id not in {s["id"] for s in st["staff"].values()}]
-    wr.rng.shuffle(adults)
-    used = set()
-    for p in adults:
+    h = w.households[p.household]
+    town_ = esc(town(w, p.region))
+    region_ = esc(rname(w, p.region))
+    pn = esc(pres.name) if pres else None
+    # their own week
+    for day, text in reversed(p.life[-5:]):
+        if w.day - day > 21:
+            break
+        if text.startswith("had "):
+            out.append(("parent", wr_pick_static(p.id, [
+                f"Sir, our family has {esc(text[4:])} this month. I write so that everyone in {town_} may know it, "
+                "and wish the child well.",
+                f"Sir, we have {esc(text[4:])}, and both are well. My thanks to the neighbors who brought bread "
+                "while we were busy."])))
+        elif text.startswith("married "):
+            spouse = esc(text[len("married "):].split(" in ")[0])
+            out.append(("wedding", wr_pick_static(p.id, [
+                f"Sir, I was married this month to {spouse}. My thanks to all who came, and to both our families "
+                "for their kindness.",
+                f"Sir, {spouse} and I are wed. We hope to keep a house as happy as the ones we grew up in.",
+                f"Sir, let it be known that {spouse} has done me the honor of marrying me. "
+                f"There is no luckier soul in {town_}."])))
+        elif text.startswith("moved into a new house built by "):
+            b = esc(text[len("moved into a new house built by "):])
+            out.append(("house", f"Sir, after a long wait my household has a roof of its own, built by {b}. "
+                                 "I could not ask for better work."))
+        elif text.startswith("was given a public house"):
+            out.append(("public_house", "Sir, my family has been given a public house. Whatever else is said of "
+                                        "the government, it did right by us."))
+        elif text.startswith("lost the family house"):
+            out.append(("lost_house", "Sir, the weather took our house. We are lodging where we can. I ask any "
+                                      "builder with time to spare to remember us."))
+        elif text.startswith("was widowed"):
+            out.append(("grief", f"Sir, I have lost my spouse. I want to thank my neighbors in {town_}, who have "
+                                 "not let me eat alone."))
+        elif text.startswith("won "):
+            out.append(("champion", f"Sir, I thank everyone who cheered at the festival. I will defend the title "
+                                    "next year, and I hope to see the same crowd."))
+        elif text.startswith("made a "):
+            work = esc(text[len("made a "):])
+            out.append(("artist", f"Sir, I have finished a {work}. Anyone in {region_} who would like to hear or "
+                                  "see it need only ask."))
+        elif text.startswith("came up with "):
+            out.append(("inventor", "Sir, I have found a better way of doing my work, and I will gladly show it "
+                                    "to anyone in my trade who asks."))
+    # trouble at home
+    if h.house is None and h.homeless_since is not None and w.day - h.homeless_since > 28:
+        weeks = (w.day - h.homeless_since) // 7
+        out.append(("homeless", f"Sir, my household has been without a house of our own for {weeks} weeks. "
+                                f"We are not idle people. I ask the {'president' if pres else 'government'} what is "
+                                "to be done for families like mine."))
+    if p.hunger >= 4:
+        out.append(("hunger", "Sir, there is not enough bread on our table. I write so that those with full "
+                              "stores will remember their neighbors."))
+    # what happened in their region and their trade
+    for e in week_events:
+        if e.get("region") != p.region:
+            continue
+        t = e["type"]
+        if t == "storm" and p.job == "fisher":
+            out.append(("storm", "Sir, a week ashore is a week without fish. We fishers ask for patience from "
+                                 "those who buy from us."))
+        elif t == "fish_run" and p.job == "fisher":
+            out.append(("fish_run", "Sir, the nets have not been so full in years. Come down to the water while "
+                                    "the fish are cheap."))
+        elif t in ("harvest_blight", "drought") and p.job == "farmer":
+            out.append(("bad_crop", f"Sir, the fields of {region_} are failing us this year. I ask those who can "
+                                    "to put grain aside for the winter."))
+        elif t == "harvest_good" and p.job == "farmer":
+            out.append(("good_crop", f"Sir, the grain in {region_} stands taller than I have ever seen it. "
+                                     "There will be bread enough this winter."))
+        elif t == "works_begun" and pres:
+            kind = e["data"].get("kind")
+            what = esc(C.FACILITIES.get(kind, {}).get("name", "new works"))
+            cost = e["data"].get("cost", 0)
+            if p.approval >= 0.55:
+                out.append(("works_praise", f"Sir, {what} for {region_} is long overdue. I thank President {pn} "
+                                            "for seeing it done."))
+            elif p.approval < 0.4:
+                out.append(("works_grumble", f"Sir, {cost:.0f} coins for {what} in {region_}. I would like to know "
+                                             "who asked for it, and who will pay."))
+    # prices
+    g = price_moves.get("grain")
+    if g is not None and abs(g) >= 0.12:
+        if g < 0 and p.job == "farmer":
+            out.append(("price_low", wr_pick_static(p.id, [
+                f"Sir, grain fetches {abs(g):.0%} less than it did a week ago. A farmer cannot live on such prices.",
+                f"Sir, another week, another fall in the price of grain, {abs(g):.0%} this time. Who will pay a fair "
+                "price for honest work?"])))
+        elif g < 0 and p.job and p.job not in ("farmer",):
+            out.append(("price_cheap", wr_pick_static(p.id, [
+                "Sir, bread is cheaper this week than I can remember. Long may it last.",
+                "Sir, with grain this cheap, my family eats better than it has in years. I thank the farmers."])))
+        elif g > 0 and p.job != "farmer":
+            out.append(("price_dear", f"Sir, grain costs {g:.0%} more than last week. How are working families "
+                                      "to keep up?"))
+    # opinions of the president
+    if pres and p.approval < 0.2:
+        out.append(("against", wr_pick_static(p.id, [
+            f"Sir, I have lost all faith in President {pn}. The sooner the people are asked again, the better.",
+            f"Sir, I would like it known that not everyone in {region_} is content to be governed by {pn}."])))
+    elif pres and p.approval > 0.9:
+        out.append(("for", wr_pick_static(p.id, [
+            f"Sir, amid all the grumbling, let one voice say that President {pn} has served us well.",
+            f"Sir, I write only to thank President {pn} for a fair season."])))
+    if p.job and w.gov.get("subsidies", {}).get(p.job):
+        out.append(("subsidy", f"Sir, as a {esc(p.job)} I am grateful for the subsidy. It has kept my family's "
+                               "hearth warm."))
+    return out
+
+
+def wr_pick_static(seed, options):
+    return options[seed % len(options)]
+
+
+def letters(w, st, wr, week_events=(), price_moves=None, max_letters=2):
+    """Letters from citizens with something real to say.
+
+    Every possible letter in the nation is gathered first. Kinds the paper has not printed in its last
+    few issues come first, no kind appears twice in an issue, and nobody writes in two issues running.
+    """
+    pres = w.people.get(w.president)
+    price_moves = price_moves or {}
+    staff = {s["id"] for s in st["staff"].values()}
+    recent_kinds = st.setdefault("recent_letter_kinds", [])
+    recent_writers = set(st.setdefault("recent_letter_writers", []))
+    pool = []
+    for p in w.people.values():
+        if p.age(w.day) < C.ADULT_AGE or p.id == w.president or p.id in staff or p.id in recent_writers:
+            continue
+        for kind, text in _letter_options(w, p, week_events, price_moves, pres):
+            pool.append((kind, text, p))
+    wr.rng.shuffle(pool)
+    # fresh kinds first; among those, rarer kinds before common ones
+    counts = {}
+    for kind, _, _ in pool:
+        counts[kind] = counts.get(kind, 0) + 1
+    pool.sort(key=lambda x: (x[0] in recent_kinds, counts[x[0]]))
+    out, kinds, households, writers = [], set(), set(), []
+    for kind, text, p in pool:
         if len(out) >= max_letters:
             break
-        if p.household in used:
+        if kind in kinds or p.household in households:
             continue
-        h = w.households[p.household]
-        sign = f"{esc(p.name)}, {esc(p.job or 'retired')}, {esc(town(w, p.region))}"
-        text = None
-        if h.house is None and h.homeless_since is not None and w.day - h.homeless_since > 28:
-            weeks = (w.day - h.homeless_since) // 7
-            text = (f"Sir, my household has been without a house of our own for {weeks} weeks. "
-                    f"We are not idle people. I ask the {'president' if pres else 'government'} what is to be done "
-                    "for families like mine.")
-        elif p.hunger >= 4:
-            text = ("Sir, there is not enough bread on our table. I write so that those with full stores "
-                    "will remember their neighbors.")
-        elif pres and p.approval < 0.2:
-            text = wr.pick([f"Sir, I have lost all faith in President {esc(pres.name)}. The sooner the people are "
-                            "asked again, the better.",
-                            f"Sir, I would like it known that not everyone in {esc(rname(w, p.region))} is content "
-                            f"to be governed by {esc(pres.name)}."])
-        elif pres and p.approval > 0.92:
-            text = wr.pick([f"Sir, amid all the grumbling, let one voice say that President {esc(pres.name)} "
-                            "has served us well.",
-                            f"Sir, I write only to thank President {esc(pres.name)} for a fair season."])
-        elif p.job and w.gov.get("subsidies", {}).get(p.job):
-            text = (f"Sir, as a {esc(p.job)} I am grateful for the subsidy. It has kept my family's hearth warm.")
-        elif p.satisfaction > 0.9 and wr.rng.random() < 0.1:
-            text = (f"Sir, I write simply to say that life in {esc(town(w, p.region))} is good this season, "
-                    "and I wish the same for my countrymen.")
-        if text and text.split(",")[0][:40] not in {t.split(",")[0][:40] for t, _ in out} \
-                and not any(text[:30] == t[:30] for t, _ in out):
-            out.append((text, sign))
-            used.add(p.household)
+        out.append((text, f"{esc(p.name)}, {esc(p.job or 'retired')}, {esc(town(w, p.region))}"))
+        kinds.add(kind)
+        households.add(p.household)
+        writers.append(p.id)
+        if p.spouse:
+            writers.append(p.spouse)   # a couple won't both write about the same wedding
+    if not out and "content" not in recent_kinds and wr.rng.random() < 0.5:
+        happy = [p for p in w.people.values() if p.age(w.day) >= C.ADULT_AGE and p.satisfaction > 0.88
+                 and p.id not in staff and p.id not in recent_writers]
+        if happy:
+            p = wr.rng.choice(happy)
+            out.append((f"Sir, I write simply to say that life in {esc(town(w, p.region))} is good this season, "
+                        "and I wish the same for my countrymen.",
+                        f"{esc(p.name)}, {esc(p.job or 'retired')}, {esc(town(w, p.region))}"))
+            kinds.add("content")
+            writers.append(p.id)
+    st["recent_letter_kinds"] = (recent_kinds + sorted(kinds))[-6:]
+    st["recent_letter_writers"] = (st["recent_letter_writers"] + writers)[-12:]
     return out
 
 
@@ -673,6 +798,10 @@ def publish(w, log, out_dir, stats, stats_prev=None):
     from . import paper_extra as X
     follow = X.threads(w, st, events, wr)
     stories = articles(w, st, events, wr) + follow + X.sports(w, events, wr)
+    price_moves = X.price_moves(w, stats_prev)
+    for extra in (X.market_trend(w, st, price_moves), X.week_roundup(w, events)):
+        if extra:
+            stories.append(extra)
     recap = X.term_recap(w, st, log, wr)
     if recap:
         stories.append(recap)
@@ -706,7 +835,7 @@ def publish(w, log, out_dir, stats, stats_prev=None):
         "issue": issue, "date": f"{label(end)}", "population": stats["population"], "stories": stories,
         "markets": markets(w, stats_prev, wr), "weather": weather_lines(w, wr),
         "words": words_corner(w, events, wr), "editorial": editorial(w, st, stats, wr),
-        "letters": letters(w, st, wr), "births": b, "marriages": m, "deaths": d,
+        "letters": letters(w, st, wr, events, price_moves), "births": b, "marriages": m, "deaths": d,
         "comings": comings_goings(events)[:12], "staff_line": staff_line, "land_by": byline(w, st, "land"),
         "arts": X.arts_section(w, st, events, wr), "region": X.region_report(w, st, stats, wr),
         "profile": X.profile(w, st, wr), "obituaries": X.obituaries(w, events), "year_ago": X.year_ago(w, st, log),
