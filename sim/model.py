@@ -118,6 +118,7 @@ class World:
     week_start_prices: dict = field(default_factory=dict)
     hazard: dict = field(default_factory=dict)      # region -> extra death risk this week
     sell_through: dict = field(default_factory=dict)  # good -> share of goods offered that sold
+    fill_rate: dict = field(default_factory=dict)     # good -> share of what buyers asked for that they got
     demand: dict = field(default_factory=dict)        # good -> units households want per day (smoothed)
     gov: dict = field(default_factory=dict)           # government state, see government.py
     facilities: dict = field(default_factory=dict)    # "id" -> public works built or under way

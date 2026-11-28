@@ -98,6 +98,9 @@ def _tavern(w, log, region, goers):
             h.inv["ale"] -= 1
             p.leisure = min(1.0, p.leisure + 0.4)
             drank = True
+            if p.traits["sociability"] > 0.65 and h.inv.get("ale", 0.0) >= 1:
+                h.inv["ale"] -= 1
+                p.leisure = min(1.0, p.leisure + 0.1)
         else:
             p.leisure = min(1.0, p.leisure + 0.15)
             drank = False
@@ -153,10 +156,16 @@ def _festival(w, log, kind):
         return set()
     w.treasury -= cost
     w.count("treasury_out", cost)
-    # most of the money goes on food and drink bought from local households
+    # the feast itself: grain, meat and ale bought from the households with the most to spare
+    from .economy import buy_from_households
+    left = cost
+    for good, per_head in (("grain", 1.0), ("meat", 0.3), ("ale", 0.5)):
+        left -= buy_from_households(w, good, per_head * pop, left * 0.6)
+    # the rest pays the people who cook, carry and play
     hhs = [h for h in w.households.values() if h.members]
-    for h in w.rng.sample(hhs, min(len(hhs), 25)):
-        h.coins += cost / min(len(hhs), 25)
+    if left > 0 and hhs:
+        for h in w.rng.sample(hhs, min(len(hhs), 25)):
+            h.coins += left / min(len(hhs), 25)
     for p in w.people.values():
         p.approval = min(1.0, p.approval + 0.03)
     if kind == "harvest":

@@ -27,13 +27,14 @@ START_PRICES = {
     "grain": 1.0, "fish": 1.1, "meat": 1.8, "wool": 1.2, "timber": 1.0,
     "stone": 1.2, "ore": 2.0, "tools": 10.0, "cloth": 5.0, "ale": 1.5,
 }
-PRICE_FLOOR = 0.3      # prices never fall below this share of the start price
+PRICE_FLOOR = 0.15     # prices never fall below this share of the start price
 PRICE_CEILING = 8.0    # ...or rise above this multiple of it
 
 FOOD_PER_ADULT = 1.0   # food units eaten per day
 FOOD_PER_CHILD = 0.6
 TOOL_LIFE_DAYS = 120   # one tool lasts this many working days
 TOOL_BONUS = 1.3       # output multiplier when working with tools
+FAIR_WAGE = 1.0        # coins a day's work is worth at the founding's price level; sets the cost floor
 CLOTHING_LIFE = 150    # days a set of clothes lasts
 
 # ---------------------------------------------------------------- jobs

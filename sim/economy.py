@@ -170,7 +170,7 @@ def produce(w, log):
                     * skill_mult(p, job) * labor_mult(p, day))
             if _glutted(w, hh, spec):
                 # nobody is buying: work slackens and the time goes to rest
-                mult *= 0.25
+                mult *= 0.15
             if hh.tool_days >= 1:
                 mult *= C.TOOL_BONUS
                 hh.tool_days -= 1
@@ -207,7 +207,7 @@ def _glutted(w, hh, spec):
         elif g in ("fish", "meat"):
             cap = 3 * F + 4 * q
         else:
-            cap = 25 * q
+            cap = 12 * q
         if hh.inv.get(g, 0.0) < cap:
             return False
     return True
@@ -317,12 +317,38 @@ def _finish_project(w, log, proj, builder, bhh):
 
 
 # ---------------------------------------------------------------- market
+def _unit_labor():
+    """Worker-days and raw materials it takes to make one unit of each good, on an ordinary day."""
+    labor, inputs = {}, {}
+    for job, spec in C.JOBS.items():
+        outs = spec["outputs"]
+        if not outs:
+            continue
+        mult = season_mean(job) * C.TOOL_BONUS * C.WORK_BOOST
+        total = sum(q * C.START_PRICES[g] for g, q in outs.items())
+        for g, q in outs.items():
+            share = q * C.START_PRICES[g] / total       # this good's share of the day's work
+            labor[g] = share / (q * mult)
+            inputs[g] = {i: iq * share / q for i, iq in spec.get("inputs", {}).items()}
+    return labor, inputs
+
+
+UNIT_LABOR, UNIT_INPUTS = _unit_labor()
+
+
+def unit_cost(w, good):
+    """What one unit costs to make: a fair day's wage for the labor, plus materials at today's prices."""
+    wage = C.FAIR_WAGE * w.gov.get("price_level", 1.0)
+    return wage * UNIT_LABOR[good] + sum(q * w.prices[i] for i, q in UNIT_INPUTS[good].items())
+
+
 def willing_share(w, good):
-    """Sellers hold back when the price is below the customary price.
-    Perishable goods must be sold soon, so their sellers hold back less."""
-    ratio = w.prices[good] / customary_price(w, good)
-    power = 0.7 if good in ("fish", "meat") else 1.5
-    return min(1.0, max(0.05, ratio ** power))
+    """Sellers hold back when the price is below what the goods cost to make.
+    Fish and meat spoil, so their sellers will take a loss rather than throw them away."""
+    r = w.prices[good] / max(0.01, unit_cost(w, good))
+    if good in ("fish", "meat"):
+        return min(1.0, max(0.4, 0.4 + 0.6 * (r - 0.7) / 0.5))
+    return min(1.0, max(0.08, 0.08 + 0.92 * (r - 0.85) / 0.35))
 
 
 def _clear(w, good, offers, requests):
@@ -367,13 +393,15 @@ def _clear(w, good, offers, requests):
     w.demand[good] = 0.97 * w.demand.get(good, total_r) + 0.03 * total_r
     st = traded / total_o if total_o > 1e-9 else 1.0
     w.sell_through[good] = 0.9 * w.sell_through.get(good, 1.0) + 0.1 * st
+    if total_r > 1e-9:
+        w.fill_rate[good] = 0.9 * w.fill_rate.get(good, 1.0) + 0.1 * (traded / total_r)
     return traded
 
 
 def target_food_days(w):
     """Households store more food when it is cheap and less when it is dear."""
     cheapness = min(w.prices[g] / w.avg_prices[g] for g in C.FOODS)
-    return min(160.0, max(10.0, 28.0 * (1.0 / cheapness) ** 1.5))
+    return min(160.0, max(20.0, 28.0 * (1.0 / cheapness) ** 1.5))
 
 
 def market(w, log):
@@ -401,6 +429,9 @@ def market(w, log):
             deficit = max(0.0, target * F - stock)
             if g in ("fish", "meat"):
                 deficit = min(deficit, max(0.0, 4 * F - perish))
+                # comfortable families buy fish and meat for the table even with grain in store
+                if (h.coins / max(1, len(h.members)) >= 15 and price <= 1.2 * customary_price(w, g)):
+                    deficit = max(deficit, max(0.0, 3 * MEAT_SHARE * F - perish))
             share = 0.95 if stock < 5 * F else 0.6
             budget = max(0.0, h.coins * share - spent[h.id])
             q = min(deficit, budget / price)
@@ -438,8 +469,9 @@ def market(w, log):
             if h.inv["tools"] > 0.01:
                 offers[h.id] = h.inv["tools"]
             continue
-        if n_work and h.tool_days < n_work * 20:
-            want = math.ceil((n_work * 60 - h.tool_days) / C.TOOL_LIFE_DAYS)
+        well_off = h.coins / max(1, len(h.members)) >= 60
+        if n_work and h.tool_days < n_work * (45 if well_off else 20):
+            want = math.ceil((n_work * (120 if well_off else 60) - h.tool_days) / C.TOOL_LIFE_DAYS)
             q = min(want, max(0.0, h.coins * 0.35) / price)
             if q > 0.05:
                 requests[h.id] = q
@@ -455,7 +487,8 @@ def market(w, log):
     offers, requests = {}, {}
     ragged = {}
     for h in hhs:
-        r = [w.people[m] for m in h.members if w.people[m].clothing < 25]
+        limit = 70 if h.coins / max(1, len(h.members)) >= 40 else 25
+        r = [w.people[m] for m in h.members if w.people[m].clothing < limit]
         ragged[h.id] = r
         have = h.inv.get("cloth", 0.0)
         if have - len(r) > 0.01:
@@ -475,7 +508,9 @@ def market(w, log):
     price = w.prices["ale"]
     offers, requests = {}, {}
     for h in hhs:
-        want = sum(1 for m in h.members if drinks(w.people[m], w.day))
+        comfortable = h.coins / max(1, len(h.members)) >= 25
+        want = sum((2 if comfortable and w.people[m].traits["sociability"] > 0.65 else 1)
+                   for m in h.members if drinks(w.people[m], w.day))
         have = h.inv.get("ale", 0.0)
         if have - want > 0.01:
             offers[h.id] = have - want
@@ -487,6 +522,34 @@ def market(w, log):
 
     for g in C.GOODS:
         w.avg_prices[g] += (w.prices[g] - w.avg_prices[g]) / 120
+
+
+def buy_from_households(w, good, qty, budget):
+    """The government buys goods straight from the households holding the most to spare.
+    Returns coins spent."""
+    price = w.prices[good]
+    spent = 0.0
+    holders = []
+    for h in w.households.values():
+        if not h.members:
+            continue
+        keep = 30 * food_need(w, h) if good in C.FOODS else 0.0
+        spare = h.inv.get(good, 0.0) - keep
+        if spare > 0.5:
+            holders.append((spare, h))
+    holders.sort(key=lambda x: -x[0])
+    for spare, h in holders:
+        if qty <= 0 or spent >= budget:
+            break
+        take = min(spare, qty, (budget - spent) / price)
+        h.inv[good] -= take
+        h.coins += take * price
+        spent += take * price
+        qty -= take
+    return spent
+
+
+MEAT_SHARE = 0.3   # share of a normal day's food that is fish or meat
 
 
 def drinks(p, day):
@@ -513,10 +576,21 @@ def consume(w, log):
             continue
         F = food_need(w, h)
         left = F
-        for g in ("fish", "meat", "grain"):
-            take = min(left, h.inv.get(g, 0.0))
+        # meals: some fish or meat, mostly bread; more fish and meat only if the bread runs out
+        for g, cap in (("fish", MEAT_SHARE * F), ("meat", MEAT_SHARE * F), ("grain", F),
+                       ("fish", F), ("meat", F)):
+            take = min(left, cap, h.inv.get(g, 0.0))
             h.inv[g] -= take
             left -= take
+        if left <= 0 and food_stock(h) >= 200 * F:
+            # a full larder means bigger meals, meat and fish first
+            extra = 0.2 * F
+            for g in ("fish", "meat", "grain"):
+                if g == "grain" and w.prices["grain"] > 0.6 * customary_price(w, "grain"):
+                    break
+                take = min(extra, h.inv.get(g, 0.0))
+                h.inv[g] -= take
+                extra -= take
         if left > 0:
             # with nothing in the larder, people forage, glean and snare what they can
             per_head = 0.12 if season(w.day) == "winter" else 0.3

@@ -172,18 +172,23 @@ def job_value(w, p, job, region_key, counts, producers, extra=1):
     if rm <= 0:
         return 0.0
     mult = season_mean(job) * rm * skill_mult(p, job) * labor_mult(p, w.day) * C.TOOL_BONUS
+    # a trade that cannot buy its materials cannot make anything
+    mult *= min((w.fill_rate.get(g, 1.0) for g in spec.get("inputs", {})), default=1.0)
     hh = w.households[p.household]
     n_workers = max(1, sum(1 for m in hh.members if w.people[m].job) + (extra if p.job is None else 0))
     food_share = food_need(w, hh) / n_workers
     value = 0.0
     for g, q in spec["outputs"].items():
         made = q * mult
-        price = 0.25 * w.prices[g] + 0.75 * w.avg_prices[g]
+        # food prices swing with the seasons, so food trades are judged on the longer view
+        recent = 0.25 if g in C.FOODS else 0.6
+        price = recent * w.prices[g] + (1 - recent) * w.avg_prices[g]
         own = min(made, food_share) if g in C.FOODS else 0.0
         market = w.demand.get(g, 0.0) / (producers.get(g, 0) + extra)
-        value += price * (own + min(made - own, market))
+        selling = 1.0 if g in C.FOODS else w.sell_through.get(g, 1.0) ** 0.5
+        value += price * (own + min(made - own, market) * selling)
     for g, q in spec.get("inputs", {}).items():
-        value -= q * mult * (0.25 * w.prices[g] + 0.75 * w.avg_prices[g])
+        value -= q * mult * (0.6 * w.prices[g] + 0.4 * w.avg_prices[g])
     sub = w.gov.get("subsidies", {}).get(job)
     if sub:
         value += sub["rate"]
@@ -196,6 +201,10 @@ def choose_jobs(w, log):
     producers = producer_counts(w)
     n_workers = sum(counts.values())
     switches_left = max(2, int(n_workers * 0.006))
+    trade_size = {}
+    for (r, j), n in counts.items():
+        trade_size[j] = trade_size.get(j, 0) + n
+    joined = {}
     people = list(w.people.values())
     rng.shuffle(people)
     for p in people:
@@ -231,7 +240,10 @@ def choose_jobs(w, log):
             continue
         current = options.get(p.job, 0.0) * 1.2 if p.job else 0.0
         best = max(options, key=options.get)
+        if joined.get(best, 0) >= max(1, int(trade_size.get(best, 0) * 0.05)):
+            continue   # word of a good trade spreads slowly; only a few take it up each day
         if best != p.job and options[best] > current * (1.05 + 0.1 * (1 - p.traits["boldness"])):
+            joined[best] = joined.get(best, 0) + 1
             old = p.job
             if old:
                 counts[(p.region, old)] -= 1
